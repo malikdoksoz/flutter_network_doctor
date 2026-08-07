@@ -27,6 +27,7 @@ void main() {
     final json = report.toJson();
 
     expect(json['health'], 'healthy');
+    expect(json['schemaVersion'], 1);
     expect(json['hasInternet'], isTrue);
     expect(json['transports'], <String>['wifi']);
     expect((json['wifi']! as Map<String, Object?>)['gateway'], '192.168.1.1');
@@ -86,5 +87,56 @@ void main() {
 
   test('config rejects empty probe hosts', () {
     expect(() => NetworkDoctorConfig(dnsHost: '  '), throwsArgumentError);
+  });
+
+  test('config rejects a non-positive overall timeout', () {
+    expect(
+      () => NetworkDoctorConfig(overallTimeout: Duration.zero),
+      throwsArgumentError,
+    );
+  });
+
+  test('full redaction hides local and native network addresses', () {
+    final report = NetworkDoctorReport(
+      generatedAt: DateTime.utc(2026, 8, 7, 9),
+      transports: const <NetworkTransport>[NetworkTransport.wifi],
+      hasInternet: true,
+      health: NetworkHealth.healthy,
+      probes: const <NetworkProbeResult>[
+        NetworkProbeResult(
+          name: 'ipv4',
+          status: ProbeStatus.success,
+          metadata: <String, Object?>{'address': '192.168.1.1'},
+        ),
+      ],
+      ipv4Available: true,
+      ipv6Available: false,
+      wifi: const WifiNetworkInfo(
+        ssid: 'Office',
+        ipv4: '192.168.1.5',
+        gateway: '192.168.1.1',
+      ),
+      platform: const PlatformNetworkInfo(
+        dnsServers: <String>['192.168.1.1'],
+        routes: <String>['0.0.0.0/0'],
+        interfaceName: 'wlan0',
+      ),
+    );
+
+    final json = report.toJson(
+      redactWifiIdentifiers: true,
+      redactNetworkAddresses: true,
+    );
+    final wifi = json['wifi']! as Map<String, Object?>;
+    final platform = json['platform']! as Map<String, Object?>;
+    final probes = json['probes']! as List<Object?>;
+    final probe = probes.single! as Map<String, Object?>;
+    final metadata = probe['metadata']! as Map<String, Object?>;
+
+    expect(wifi['ssid'], '<redacted>');
+    expect(wifi['ipv4'], '<redacted>');
+    expect(platform['dnsServers'], <String>['<redacted>']);
+    expect(platform['interfaceName'], '<redacted>');
+    expect(metadata['address'], '<redacted>');
   });
 }

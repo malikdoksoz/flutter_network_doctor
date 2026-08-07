@@ -1,16 +1,24 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../cancellation.dart';
 import '../models.dart';
+import '../run_cancellation.dart';
 import 'platform_probe_interface.dart';
 
 /// `dart:io` implementation of lower-level network probes.
 final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
   @override
-  Future<NetworkProbeResult> dns(String host, Duration timeout) async {
+  Future<NetworkProbeResult> dns(
+    String host,
+    Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
+  ) async {
     final stopwatch = Stopwatch()..start();
     try {
-      final addresses = await InternetAddress.lookup(host).timeout(timeout);
+      final addresses = await cancellation.guard(
+        InternetAddress.lookup(host).timeout(timeout),
+      );
       stopwatch.stop();
       return NetworkProbeResult(
         name: 'dns',
@@ -19,11 +27,16 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
         message: addresses.isEmpty
             ? 'No DNS records returned.'
             : 'DNS resolved.',
+        errorCode: addresses.isEmpty ? NetworkProbeErrorCode.dnsLookup : null,
         metadata: <String, Object?>{
           'host': host,
           'addresses': addresses.map((InternetAddress e) => e.address).toList(),
         },
       );
+    } on NetworkDoctorCancelledException {
+      rethrow;
+    } on NetworkDoctorTimeoutException {
+      rethrow;
     } on Object catch (error) {
       stopwatch.stop();
       return NetworkProbeResult(
@@ -31,6 +44,9 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
         status: ProbeStatus.failure,
         duration: stopwatch.elapsed,
         message: error.toString(),
+        errorCode: error is TimeoutException
+            ? NetworkProbeErrorCode.timeout
+            : NetworkProbeErrorCode.dnsLookup,
         metadata: <String, Object?>{'host': host},
       );
     }
@@ -42,11 +58,15 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
     String address,
     int port,
     Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
   ) async {
     final stopwatch = Stopwatch()..start();
     Socket? socket;
     try {
-      socket = await Socket.connect(address, port, timeout: timeout);
+      socket = await cancellation.guard<Socket>(
+        Socket.connect(address, port, timeout: timeout),
+        onLateValue: (Socket value) => unawaited(value.close()),
+      );
       stopwatch.stop();
       return NetworkProbeResult(
         name: name,
@@ -55,6 +75,10 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
         message: 'Route verified with a TCP connection.',
         metadata: <String, Object?>{'address': address, 'port': port},
       );
+    } on NetworkDoctorCancelledException {
+      rethrow;
+    } on NetworkDoctorTimeoutException {
+      rethrow;
     } on Object catch (error) {
       stopwatch.stop();
       return NetworkProbeResult(
@@ -62,6 +86,9 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
         status: ProbeStatus.failure,
         duration: stopwatch.elapsed,
         message: error.toString(),
+        errorCode: error is TimeoutException
+            ? NetworkProbeErrorCode.timeout
+            : NetworkProbeErrorCode.connection,
         metadata: <String, Object?>{'address': address, 'port': port},
       );
     } finally {
@@ -74,11 +101,15 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
     String host,
     int port,
     Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
   ) async {
     final stopwatch = Stopwatch()..start();
     Socket? socket;
     try {
-      socket = await Socket.connect(host, port, timeout: timeout);
+      socket = await cancellation.guard<Socket>(
+        Socket.connect(host, port, timeout: timeout),
+        onLateValue: (Socket value) => unawaited(value.close()),
+      );
       stopwatch.stop();
       return NetworkProbeResult(
         name: 'tcp',
@@ -87,6 +118,10 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
         message: 'TCP connection established.',
         metadata: <String, Object?>{'host': host, 'port': port},
       );
+    } on NetworkDoctorCancelledException {
+      rethrow;
+    } on NetworkDoctorTimeoutException {
+      rethrow;
     } on Object catch (error) {
       stopwatch.stop();
       return NetworkProbeResult(
@@ -94,6 +129,9 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
         status: ProbeStatus.failure,
         duration: stopwatch.elapsed,
         message: error.toString(),
+        errorCode: error is TimeoutException
+            ? NetworkProbeErrorCode.timeout
+            : NetworkProbeErrorCode.connection,
         metadata: <String, Object?>{'host': host, 'port': port},
       );
     } finally {
@@ -106,11 +144,15 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
     String host,
     int port,
     Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
   ) async {
     final stopwatch = Stopwatch()..start();
     SecureSocket? socket;
     try {
-      socket = await SecureSocket.connect(host, port, timeout: timeout);
+      socket = await cancellation.guard<SecureSocket>(
+        SecureSocket.connect(host, port, timeout: timeout),
+        onLateValue: (SecureSocket value) => unawaited(value.close()),
+      );
       stopwatch.stop();
       return NetworkProbeResult(
         name: 'tls',
@@ -123,6 +165,10 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
           'selectedProtocol': socket.selectedProtocol,
         },
       );
+    } on NetworkDoctorCancelledException {
+      rethrow;
+    } on NetworkDoctorTimeoutException {
+      rethrow;
     } on Object catch (error) {
       stopwatch.stop();
       return NetworkProbeResult(
@@ -130,6 +176,9 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
         status: ProbeStatus.failure,
         duration: stopwatch.elapsed,
         message: error.toString(),
+        errorCode: error is TimeoutException
+            ? NetworkProbeErrorCode.timeout
+            : NetworkProbeErrorCode.tlsHandshake,
         metadata: <String, Object?>{'host': host, 'port': port},
       );
     } finally {

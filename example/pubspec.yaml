@@ -10,6 +10,7 @@ flutter:
   uses-material-design: true
 
 dependencies:
+  cupertino_icons: ^1.0.8
   flutter:
     sdk: flutter
   flutter_network_doctor:
@@ -17,3 +18,7 @@ dependencies:
 
 dev_dependencies:
   flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter

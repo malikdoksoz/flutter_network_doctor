@@ -1,16 +1,20 @@
 import '../models.dart';
+import '../run_cancellation.dart';
 import 'platform_probe_interface.dart';
 
 /// Stub implementation used on platforms without `dart:io` sockets.
 final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
   @override
-  Future<NetworkProbeResult> dns(String host, Duration timeout) async =>
-      NetworkProbeResult(
-        name: 'dns',
-        status: ProbeStatus.unsupported,
-        message: 'Raw DNS timing is not supported on this platform.',
-        metadata: <String, Object?>{'host': host},
-      );
+  Future<NetworkProbeResult> dns(
+    String host,
+    Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
+  ) async => NetworkProbeResult(
+    name: 'dns',
+    status: ProbeStatus.unsupported,
+    message: 'Raw DNS timing is not supported on this platform.',
+    metadata: <String, Object?>{'host': host},
+  );
 
   @override
   Future<NetworkProbeResult> ipRoute(
@@ -18,6 +22,7 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
     String address,
     int port,
     Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
   ) async => NetworkProbeResult(
     name: name,
     status: ProbeStatus.unsupported,
@@ -30,6 +35,7 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
     String host,
     int port,
     Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
   ) async => NetworkProbeResult(
     name: 'tcp',
     status: ProbeStatus.unsupported,
@@ -42,6 +48,7 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
     String host,
     int port,
     Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
   ) async => NetworkProbeResult(
     name: 'tls',
     status: ProbeStatus.unsupported,

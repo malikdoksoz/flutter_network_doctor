@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_network_doctor/flutter_network_doctor.dart';
 
 void main() {
-  runApp(const _NetworkDoctorExampleApp());
+  runApp(const NetworkDoctorExampleApp());
 }
 
-class _NetworkDoctorExampleApp extends StatelessWidget {
-  const _NetworkDoctorExampleApp();
+class NetworkDoctorExampleApp extends StatelessWidget {
+  const NetworkDoctorExampleApp({super.key});
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -26,6 +26,8 @@ class _NetworkDoctorPage extends StatefulWidget {
 class _NetworkDoctorPageState extends State<_NetworkDoctorPage> {
   final FlutterNetworkDoctor _doctor = FlutterNetworkDoctor();
   NetworkDoctorReport? _report;
+  NetworkDoctorCancellationToken? _cancellationToken;
+  String _status = 'Ready';
   bool _running = false;
 
   @override
@@ -35,15 +37,41 @@ class _NetworkDoctorPageState extends State<_NetworkDoctorPage> {
   }
 
   Future<void> _run() async {
-    setState(() => _running = true);
-    final report = await _doctor.diagnose();
-    if (!mounted) {
-      return;
-    }
+    final cancellationToken = NetworkDoctorCancellationToken();
     setState(() {
-      _report = report;
-      _running = false;
+      _running = true;
+      _cancellationToken = cancellationToken;
+      _status = 'Starting…';
     });
+
+    try {
+      final report = await _doctor.diagnose(
+        cancellationToken: cancellationToken,
+        onProgress: (NetworkDoctorProgress progress) {
+          if (mounted) {
+            setState(() {
+              _status =
+                  '${progress.stage.name}: '
+                  '${progress.completedProbes}/${progress.totalProbes}';
+            });
+          }
+        },
+      );
+      if (mounted) {
+        setState(() => _report = report);
+      }
+    } on NetworkDoctorCancelledException {
+      if (mounted) {
+        setState(() => _status = 'Cancelled');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _running = false;
+          _cancellationToken = null;
+        });
+      }
+    }
   }
 
   @override
@@ -59,11 +87,25 @@ class _NetworkDoctorPageState extends State<_NetworkDoctorPage> {
             icon: const Icon(Icons.network_check),
             label: Text(_running ? 'Running…' : 'Run diagnostics'),
           ),
+          if (_running) ...<Widget>[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _cancellationToken?.cancel,
+              icon: const Icon(Icons.cancel_outlined),
+              label: const Text('Cancel'),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(_status),
           const SizedBox(height: 16),
           Expanded(
             child: SingleChildScrollView(
               child: SelectableText(
-                _report?.toPrettyJson() ?? 'No report yet.',
+                _report?.toPrettyJson(
+                      redactWifiIdentifiers: true,
+                      redactNetworkAddresses: true,
+                    ) ??
+                    'No report yet.',
               ),
             ),
           ),

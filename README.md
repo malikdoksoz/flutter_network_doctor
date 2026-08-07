@@ -15,15 +15,21 @@ Instead of only answering “Wi-Fi or mobile?”, `flutter_network_doctor` build
 - Wi-Fi/LAN metadata: SSID, BSSID, local IPv4/IPv6, subnet, broadcast, and gateway
 - DNS lookup, TCP connection, and TLS handshake timing on `dart:io` platforms
 - Separate IPv4 and IPv6 route checks
-- Captive-portal redirect heuristic
-- Structured JSON support reports with optional SSID/BSSID redaction
-- Web-safe behavior: unavailable socket probes return `unsupported` instead of throwing
+- Native DNS server, route, interface, MTU, proxy, and path characteristics
+- Metered, expensive, constrained, validated, and captive-portal state where supported
+- Android 17 local-network permission readiness
+- Overall deadlines, cancellation, and progress callbacks
+- Balanced, strict, and internet-only health policies
+- Versioned JSON support reports with two levels of privacy redaction
+- Web and WebAssembly-safe behavior: unavailable socket probes return
+  `unsupported` instead of throwing
 - No analytics, telemetry, or automatic permission prompts
 
 ## Requirements
 
 - Flutter 3.38.1 or later
 - Dart 3.10.0 or later, below Dart 4.0.0
+- Android API 21 or later
 - iOS 13.0 or later
 - macOS 10.15 or later
 - Java 17, Kotlin 2.2.0, Android Gradle Plugin 8.12.1 or later, and Gradle 8.13 or later for Android consumers
@@ -34,7 +40,7 @@ The effective platform minimums come from the package's current `network_info_pl
 
 ```yaml
 dependencies:
-  flutter_network_doctor: ^0.1.0
+  flutter_network_doctor: ^0.2.0
 ```
 
 Then install dependencies:
@@ -57,9 +63,12 @@ try {
   print(report.hasInternet);
   print(report.transports);
   print(report.wifi?.gateway);
+  print(report.platform?.dnsServers);
+  print(report.platform?.isMetered);
 
   final supportReport = report.toPrettyJson(
     redactWifiIdentifiers: true,
+    redactNetworkAddresses: true,
   );
   print(supportReport);
 } finally {
@@ -75,6 +84,7 @@ Call `dispose()` when the doctor is no longer needed. A caller-supplied `http.Cl
 final report = await doctor.diagnose(
   config: NetworkDoctorConfig(
     timeout: const Duration(seconds: 3),
+    overallTimeout: const Duration(seconds: 12),
     internetEndpoints: <Uri>[
       Uri.https('one.one.one.one'),
       Uri.https('icanhazip.com'),
@@ -87,23 +97,54 @@ final report = await doctor.diagnose(
     tlsPort: 443,
     ipv4Host: '1.1.1.1',
     ipv6Host: '2606:4700:4700::1111',
+    healthPolicy: NetworkHealthPolicy.balanced,
   ),
 );
 ```
 
 Each enabled probe is isolated. A failed DNS, socket, TLS, HTTP, or Wi-Fi metadata operation is represented in the report and does not abort the whole diagnostic run.
 
+## Progress and cancellation
+
+```dart
+final cancellationToken = NetworkDoctorCancellationToken();
+
+final diagnosis = doctor.diagnose(
+  cancellationToken: cancellationToken,
+  onProgress: (progress) {
+    print(
+      '${progress.stage.name}: '
+      '${progress.completedProbes}/${progress.totalProbes}',
+    );
+  },
+);
+
+// Call from a cancel button or application lifecycle handler when needed.
+cancellationToken.cancel();
+
+try {
+  final report = await diagnosis;
+  print(report.totalDuration);
+} on NetworkDoctorCancelledException {
+  // The caller cancelled the run.
+} on NetworkDoctorTimeoutException {
+  // The complete run exceeded overallTimeout.
+}
+```
+
 ## Health classification
 
 | Value | Meaning |
 |---|---|
-| `healthy` | Internet reachability was verified and every supported, enabled probe succeeded. |
-| `degraded` | Internet works, but at least one supported, enabled probe failed. |
+| `healthy` | Internet reachability was verified and the selected health policy passed. |
+| `degraded` | Internet works, but a policy-relevant probe failed or a captive portal was reported. |
 | `localOnly` | A local transport exists, but the configured HTTP quorum did not verify internet access. |
 | `offline` | No usable transport was reported and internet access was not verified. |
 | `unknown` | Reserved for states that cannot be classified reliably. |
 
 Direct HTTP reachability takes precedence over a stale or unavailable operating-system transport result. This prevents a successful connection from being mislabeled as offline.
+
+The default `balanced` policy treats DNS, TCP, and TLS as health signals while keeping missing IPv6 and redundant HTTP endpoint failures informational. Use `strict` when every supported probe must pass, or `internetOnly` when only the HTTP quorum should determine health.
 
 ## Platform support
 
@@ -118,10 +159,13 @@ The public API is usable on Android, iOS, macOS, Windows, Linux, and Web. Capabi
 | TCP timing | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | TLS timing | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | IPv4/IPv6 route check | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Native path characteristics | ✅ | ✅ | ✅ | — | — | — |
+| Metered/expensive/constrained | ✅ | ✅ | ✅ | — | — | — |
+| Android 17 permission readiness | ✅ | — | — | — | — | — |
 
 `*` Browser CORS and Content Security Policy rules apply to configured HTTP endpoints.
 
-Web returns `ProbeStatus.unsupported` for raw DNS, TCP, TLS, and IP-route checks. It does not emulate results that the browser cannot measure. Individual transport values can also depend on what the operating system exposes.
+Web returns `ProbeStatus.unsupported` for raw DNS, TCP, TLS, IP-route, and native platform checks. Linux and Windows use the complete Dart probe set but currently return `unsupported` for the additional native platform snapshot. Unsupported capabilities never cause a crash or degrade balanced health.
 
 ## Wi-Fi and local-network permissions
 
@@ -138,7 +182,7 @@ Apps performing HTTP or socket diagnostics normally declare:
 
 SSID/BSSID access can require additional Wi-Fi or location-related permissions depending on the Android version and target SDK. Follow the current `network_info_plus` setup guidance for the metadata your application uses.
 
-Android 17 enforces local-network protection for applications targeting SDK 37 or later. Direct LAN access then requires a suitable system-mediated picker or the `ACCESS_LOCAL_NETWORK` runtime permission. Version 0.1.0 reports failed LAN/socket operations but does not declare or request this host-application permission.
+Android 17 enforces local-network protection for applications targeting SDK 37 or later. Direct LAN access then requires a suitable system-mediated picker or the `ACCESS_LOCAL_NETWORK` runtime permission. Version 0.2.0 reports `notRequired`, `granted`, or `denied` through `report.platform?.localNetworkPermission`, but deliberately does not declare or request this host-application permission.
 
 ### Apple platforms
 
@@ -157,10 +201,13 @@ Before sharing a report, prefer:
 ```dart
 final safeReport = report.toPrettyJson(
   redactWifiIdentifiers: true,
+  redactNetworkAddresses: true,
 );
 ```
 
-This masks SSID and BSSID. Local IP, subnet, broadcast, and gateway values remain because they are often essential for troubleshooting; remove them separately if your support policy treats them as sensitive.
+`redactWifiIdentifiers` masks SSID and BSSID. `redactNetworkAddresses` additionally masks local IP, subnet, broadcast, gateway, DNS server, route, interface, proxy, private-DNS, and probe address fields.
+
+Every JSON report includes `schemaVersion` and `totalDurationMs` so support systems can evolve parsers safely and track complete diagnostic latency.
 
 ## Measurement notes
 
@@ -176,18 +223,26 @@ flutter pub get
 dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test
+flutter test --platform chrome
+cd example
+flutter test
+flutter test integration_test/network_doctor_integration_test.dart -d macos
+cd ..
 dart pub publish --dry-run
 ```
+
+The CI workflow builds all six targets and runs the integration smoke test on
+Android, iOS, Linux, macOS, Windows, and Web. The root performance regression
+tests also verify concurrent HTTP probe scheduling and bounded overall
+deadlines without relying on timing-sensitive external services.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
 ## Roadmap
 
-- Native DNS server discovery
-- Metered, expensive, and constrained network flags
-- Android 17 `ACCESS_LOCAL_NETWORK` readiness reporting
 - Native local-gateway reachability probe
 - Optional jitter and packet-loss sampling
+- Native Windows and Linux path characteristics
 - Reusable support/debug panel widget
 
 ## Maintainer
