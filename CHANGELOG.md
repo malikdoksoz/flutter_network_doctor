@@ -1,3 +1,8 @@
+## 0.3.2
+
+- Added pub.dev package screenshots for the network diagnostics example.
+- Made README screenshots 240px wide and link to their full-size images.
+
 ## 0.3.1
 
 - Fixed README screenshots on pub.dev by using GitHub-hosted image URLs.

@@ -1,6 +1,6 @@
 name: flutter_network_doctor
 description: Production-grade Flutter network diagnostics with internet, DNS, TCP/TLS, IP routes, gateway reachability, and TCP quality sampling.
-version: 0.3.1
+version: 0.3.2
 homepage: https://github.com/malikdoksoz/flutter_network_doctor
 repository: https://github.com/malikdoksoz/flutter_network_doctor
 issue_tracker: https://github.com/malikdoksoz/flutter_network_doctor/issues
@@ -15,6 +15,14 @@ topics:
   - connectivity
   - wifi
   - internet
+
+screenshots:
+  - description: Network health, transport, and local route overview.
+    path: screenshots/network-doctor-overview.png
+  - description: TCP quality sampling and local gateway reachability results.
+    path: screenshots/network-doctor-quality.png
+  - description: Redacted JSON support report ready for sharing.
+    path: screenshots/network-doctor-support-json.png
 
 dependencies:
   connectivity_plus: ^7.3.1

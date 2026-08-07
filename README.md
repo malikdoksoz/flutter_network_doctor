@@ -11,9 +11,15 @@ Instead of only answering “Wi-Fi or mobile?”, `flutter_network_doctor` build
 ## See it in action
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/network-doctor-overview.png" width="260" alt="Network health and route overview">
-  <img src="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/network-doctor-quality.png" width="260" alt="TCP quality and gateway measurements">
-  <img src="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/network-doctor-support-json.png" width="260" alt="Redacted JSON support report">
+  <a href="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/network-doctor-overview.png">
+    <img src="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/network-doctor-overview.png" width="240" alt="Network health and route overview">
+  </a>
+  <a href="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/network-doctor-quality.png">
+    <img src="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/network-doctor-quality.png" width="240" alt="TCP quality and gateway measurements">
+  </a>
+  <a href="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/network-doctor-support-json.png">
+    <img src="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/network-doctor-support-json.png" width="240" alt="Redacted JSON support report">
+  </a>
 </p>
 
 The screenshots come from a real iOS Simulator diagnostic run. Network addresses are redacted; measured timings vary by device and connection.
