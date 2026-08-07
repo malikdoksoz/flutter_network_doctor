@@ -1,3 +1,20 @@
+## 0.2.0
+
+- Added native Android, iOS, and macOS network characteristics.
+- Added DNS server, route, interface, MTU, proxy, metered, expensive,
+  constrained, validation, and captive-portal fields where supported.
+- Added Android 17 local-network permission readiness reporting.
+- Added overall diagnostic deadlines, cancellation, and progress callbacks.
+- Added balanced, strict, and internet-only health policies.
+- Added stable probe error codes, report schema version, and total duration.
+- Added full network-address redaction for support reports.
+- Isolated platform-specific connectivity and Wi-Fi implementations for clean,
+  WebAssembly-safe static analysis while retaining all six Flutter platforms.
+- Added Android, iOS, Linux, macOS, Web, and Windows build CI.
+- Added deterministic concurrency, deadline, and six-platform integration
+  regression coverage.
+- Expanded the example and automated test coverage.
+
 ## 0.1.1
 
 - Removed duplicate maintainer attribution from the README introduction.

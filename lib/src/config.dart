@@ -4,6 +4,7 @@ final class NetworkDoctorConfig {
   NetworkDoctorConfig({
     List<Uri>? internetEndpoints,
     this.timeout = const Duration(seconds: 4),
+    this.overallTimeout = const Duration(seconds: 15),
     this.dnsHost = 'example.com',
     this.tcpHost = '1.1.1.1',
     this.tcpPort = 443,
@@ -17,6 +18,8 @@ final class NetworkDoctorConfig {
     this.includeTcpProbe = true,
     this.includeTlsProbe = true,
     this.includeIpVersionProbes = true,
+    this.includePlatformInfo = true,
+    this.healthPolicy = NetworkHealthPolicy.balanced,
   }) : internetEndpoints = List<Uri>.unmodifiable(
          internetEndpoints ??
              <Uri>[Uri.https('one.one.one.one'), Uri.https('icanhazip.com')],
@@ -43,6 +46,13 @@ final class NetworkDoctorConfig {
       throw ArgumentError.value(
         timeout,
         'timeout',
+        'Must be greater than zero.',
+      );
+    }
+    if (overallTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        overallTimeout,
+        'overallTimeout',
         'Must be greater than zero.',
       );
     }
@@ -78,6 +88,9 @@ final class NetworkDoctorConfig {
 
   /// Timeout applied to each individual probe.
   final Duration timeout;
+
+  /// Maximum duration of the complete diagnostic run.
+  final Duration overallTimeout;
 
   /// Host used for the DNS resolution probe.
   final String dnsHost;
@@ -117,4 +130,23 @@ final class NetworkDoctorConfig {
 
   /// Whether to probe IPv4 and IPv6 routing separately.
   final bool includeIpVersionProbes;
+
+  /// Whether native platform network metadata should be collected.
+  final bool includePlatformInfo;
+
+  /// Policy used to derive the overall [NetworkHealth] value.
+  final NetworkHealthPolicy healthPolicy;
+}
+
+/// Controls which failed probes degrade an otherwise reachable network.
+enum NetworkHealthPolicy {
+  /// DNS, TCP, and TLS failures degrade health; IP-version and redundant HTTP
+  /// endpoint failures remain informational.
+  balanced,
+
+  /// Every supported and enabled probe must succeed.
+  strict,
+
+  /// Only the configured HTTP reachability quorum affects overall health.
+  internetOnly,
 }
