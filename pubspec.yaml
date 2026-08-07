@@ -1,6 +1,6 @@
 name: flutter_network_doctor
 description: Production-grade network diagnostics for Flutter with transport, Wi-Fi, internet, DNS, TCP, TLS, IPv4, and IPv6 checks.
-version: 0.1.0
+version: 0.1.1
 homepage: https://github.com/malikdoksoz/flutter_network_doctor
 repository: https://github.com/malikdoksoz/flutter_network_doctor
 issue_tracker: https://github.com/malikdoksoz/flutter_network_doctor/issues

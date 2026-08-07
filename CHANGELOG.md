@@ -1,3 +1,7 @@
+## 0.1.1
+
+- Removed duplicate maintainer attribution from the README introduction.
+
 ## 0.1.0
 
 - Initial release.
