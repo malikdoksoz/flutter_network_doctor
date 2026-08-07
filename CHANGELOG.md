@@ -1,3 +1,8 @@
+## 0.3.5
+
+- Added self-updating pub.dev version, score, likes, and publisher badges to the README.
+- Replaced the static license badge with one that tracks the repository license.
+
 ## 0.3.4
 
 - Added a project banner to the top of the README.

@@ -1,6 +1,6 @@
 # flutter_network_doctor
 
-[![CI](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml/badge.svg?branch=main&event=push&v=0.3.4)](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml)
+[![CI](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml/badge.svg?branch=main&event=push&v=0.3.5)](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml)
 [![pub package](https://img.shields.io/pub/v/flutter_network_doctor.svg)](https://pub.dev/packages/flutter_network_doctor)
 [![pub points](https://img.shields.io/pub/points/flutter_network_doctor)](https://pub.dev/packages/flutter_network_doctor/score)
 [![likes](https://img.shields.io/pub/likes/flutter_network_doctor)](https://pub.dev/packages/flutter_network_doctor/score)
