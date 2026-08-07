@@ -131,6 +131,8 @@ final class FlutterNetworkDoctor {
 
     final probeFutures = <Future<NetworkProbeResult>>[];
     Future<NativeNetworkProbeOutcome>? nativeOutcomeFuture;
+    Future<GatewayProbeOutcome>? gatewayOutcomeFuture;
+    Future<NetworkQualityProbeOutcome>? networkQualityOutcomeFuture;
 
     for (final endpoint in config.internetEndpoints) {
       probeFutures.add(_httpProbe(endpoint, config.timeout, cancellation));
@@ -193,6 +195,34 @@ final class FlutterNetworkDoctor {
         ),
       );
     }
+    if (config.includeGatewayProbe) {
+      gatewayOutcomeFuture = _platformProbe.gateway(
+        wifi?.gateway,
+        config.gatewayPorts,
+        config.gatewayProbeTimeout,
+        cancellation,
+      );
+      probeFutures.add(
+        gatewayOutcomeFuture.then(
+          (GatewayProbeOutcome outcome) => outcome.probe,
+        ),
+      );
+    }
+    if (config.includeNetworkQualityProbe) {
+      networkQualityOutcomeFuture = _platformProbe.networkQuality(
+        config.networkQualityHost,
+        config.networkQualityPort,
+        config.networkQualitySampleCount,
+        config.networkQualitySampleTimeout,
+        config.networkQualitySampleInterval,
+        cancellation,
+      );
+      probeFutures.add(
+        networkQualityOutcomeFuture.then(
+          (NetworkQualityProbeOutcome outcome) => outcome.probe,
+        ),
+      );
+    }
 
     var completedProbes = 0;
     final trackedProbes = probeFutures.map((Future<NetworkProbeResult> future) {
@@ -213,6 +243,8 @@ final class FlutterNetworkDoctor {
 
     final probes = await Future.wait(trackedProbes);
     final platformInfo = (await nativeOutcomeFuture)?.info;
+    final gatewayReachability = (await gatewayOutcomeFuture)?.result;
+    final networkQuality = (await networkQualityOutcomeFuture)?.result;
     final httpProbes = probes.where(
       (NetworkProbeResult result) => result.name.startsWith('http:'),
     );
@@ -261,6 +293,8 @@ final class FlutterNetworkDoctor {
       totalDuration: stopwatch.elapsed,
       wifi: (wifi?.hasData ?? false) ? wifi : null,
       platform: platformInfo,
+      gatewayReachability: gatewayReachability,
+      networkQuality: networkQuality,
       captivePortalSuspected: captivePortalSuspected,
     );
   }
@@ -449,7 +483,9 @@ final class FlutterNetworkDoctor {
       (config.includeTcpProbe ? 1 : 0) +
       (config.includeTlsProbe ? 1 : 0) +
       (config.includeIpVersionProbes ? 2 : 0) +
-      (config.includePlatformInfo ? 1 : 0);
+      (config.includePlatformInfo ? 1 : 0) +
+      (config.includeGatewayProbe ? 1 : 0) +
+      (config.includeNetworkQualityProbe ? 1 : 0);
 
   static void _emitProgress(
     NetworkDoctorProgressCallback? callback,

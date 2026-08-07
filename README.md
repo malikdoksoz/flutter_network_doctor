@@ -8,6 +8,16 @@ Production-grade network diagnostics for Flutter applications.
 
 Instead of only answering “Wi-Fi or mobile?”, `flutter_network_doctor` builds a structured support report from operating-system connectivity state, real HTTP reachability, Wi-Fi/LAN metadata, DNS timing, TCP/TLS connection timing, and separate IPv4/IPv6 route checks.
 
+## See it in action
+
+<p align="center">
+  <img src="screenshots/network-doctor-overview.png" width="260" alt="Network health and route overview">
+  <img src="screenshots/network-doctor-quality.png" width="260" alt="TCP quality and gateway measurements">
+  <img src="screenshots/network-doctor-support-json.png" width="260" alt="Redacted JSON support report">
+</p>
+
+The screenshots come from a real iOS Simulator diagnostic run. Network addresses are redacted; measured timings vary by device and connection.
+
 ## Features
 
 - Active transport detection: Wi-Fi, mobile, Ethernet, VPN, Bluetooth, satellite, and other
@@ -15,6 +25,8 @@ Instead of only answering “Wi-Fi or mobile?”, `flutter_network_doctor` build
 - Wi-Fi/LAN metadata: SSID, BSSID, local IPv4/IPv6, subnet, broadcast, and gateway
 - DNS lookup, TCP connection, and TLS handshake timing on `dart:io` platforms
 - Separate IPv4 and IPv6 route checks
+- Optional local-gateway reachability checks
+- Optional TCP quality sampling with latency, jitter, and failed-sample rate
 - Native DNS server, route, interface, MTU, proxy, and path characteristics
 - Metered, expensive, constrained, validated, and captive-portal state where supported
 - Android 17 local-network permission readiness
@@ -40,7 +52,7 @@ The effective platform minimums come from the package's current `network_info_pl
 
 ```yaml
 dependencies:
-  flutter_network_doctor: ^0.2.0
+  flutter_network_doctor: ^0.3.0
 ```
 
 Then install dependencies:
@@ -97,12 +109,20 @@ final report = await doctor.diagnose(
     tlsPort: 443,
     ipv4Host: '1.1.1.1',
     ipv6Host: '2606:4700:4700::1111',
+    includeGatewayProbe: true,
+    gatewayPorts: <int>[53, 80, 443],
+    includeNetworkQualityProbe: true,
+    networkQualityHost: '1.1.1.1',
+    networkQualityPort: 443,
+    networkQualitySampleCount: 5,
     healthPolicy: NetworkHealthPolicy.balanced,
   ),
 );
 ```
 
 Each enabled probe is isolated. A failed DNS, socket, TLS, HTTP, or Wi-Fi metadata operation is represented in the report and does not abort the whole diagnostic run.
+
+Gateway and quality probes are disabled by default because they add network traffic and diagnostic time. When enabled, `report.gatewayReachability` distinguishes a reachable local router from an unavailable gateway, while `report.networkQuality` contains the individual TCP connection samples and their aggregate metrics.
 
 ## Progress and cancellation
 
@@ -159,6 +179,8 @@ The public API is usable on Android, iOS, macOS, Windows, Linux, and Web. Capabi
 | TCP timing | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | TLS timing | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | IPv4/IPv6 route check | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Gateway reachability | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| TCP quality sampling | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Native path characteristics | ✅ | ✅ | ✅ | — | — | — |
 | Metered/expensive/constrained | ✅ | ✅ | ✅ | — | — | — |
 | Android 17 permission readiness | ✅ | — | — | — | — | — |
@@ -182,11 +204,13 @@ Apps performing HTTP or socket diagnostics normally declare:
 
 SSID/BSSID access can require additional Wi-Fi or location-related permissions depending on the Android version and target SDK. Follow the current `network_info_plus` setup guidance for the metadata your application uses.
 
-Android 17 enforces local-network protection for applications targeting SDK 37 or later. Direct LAN access then requires a suitable system-mediated picker or the `ACCESS_LOCAL_NETWORK` runtime permission. Version 0.2.0 reports `notRequired`, `granted`, or `denied` through `report.platform?.localNetworkPermission`, but deliberately does not declare or request this host-application permission.
+Android 17 enforces local-network protection for applications targeting SDK 37 or later. Direct LAN access then requires a suitable system-mediated picker or the `ACCESS_LOCAL_NETWORK` runtime permission. The package reports `notRequired`, `granted`, or `denied` through `report.platform?.localNetworkPermission`, but deliberately does not declare or request this host-application permission.
 
 ### Apple platforms
 
 On iOS, SSID/BSSID access requires the **Access WiFi Information** capability and one of Apple's permitted access conditions. Core Location authorization may also be required for the application's use case. macOS sandboxed applications must include the network entitlements appropriate to their inbound or outbound connections.
+
+An enabled gateway probe makes a direct local-network connection. The host application remains responsible for the Apple local-network privacy description and authorization behavior required by its deployment target and use case.
 
 ## Captive portal detection
 
@@ -214,6 +238,9 @@ Every JSON report includes `schemaVersion` and `totalDurationMs` so support syst
 - DNS latency measures a host lookup through the operating system resolver; it is not a direct query to every configured DNS server.
 - TCP and TLS latency measure connection setup, not bandwidth or application request latency.
 - IPv4/IPv6 checks establish TCP connections to the configured literal addresses; they are not ICMP ping tests.
+- Gateway reachability tries the configured TCP ports. A successful connection or an active refusal both prove that the gateway responded at the network layer.
+- Quality latency measures repeated TCP connection setup. `packetLossPercent` is the percentage of failed or timed-out TCP samples, not an ICMP packet-loss measurement.
+- Jitter is the mean absolute latency difference between consecutive successful TCP samples.
 - Timings can be influenced by DNS caches, connection policy, VPNs, proxies, firewalls, and platform scheduling.
 
 ## Development
@@ -240,8 +267,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
 ## Roadmap
 
-- Native local-gateway reachability probe
-- Optional jitter and packet-loss sampling
 - Native Windows and Linux path characteristics
 - Reusable support/debug panel widget
 

@@ -53,16 +53,32 @@ public class FlutterNetworkDoctorPlugin: NSObject, FlutterPlugin {
       "routes": [],
       "isExpensive": path.isExpensive,
       "isConstrained": path.isConstrained,
-      "supportsIpv4": path.supportsIPv4,
-      "supportsIpv6": path.supportsIPv6,
-      "supportsDns": path.supportsDNS,
+      "pathStatus": pathStatusName(path.status),
       "localNetworkPermission": "unsupported"
     ]
+    if path.status == .satisfied {
+      value["supportsIpv4"] = path.supportsIPv4
+      value["supportsIpv6"] = path.supportsIPv6
+      value["supportsDns"] = path.supportsDNS
+    }
     if let interface = path.availableInterfaces.first(where: {
       path.usesInterfaceType($0.type)
     }) {
       value["interfaceName"] = interface.name
     }
     return value
+  }
+
+  private func pathStatusName(_ status: NWPath.Status) -> String {
+    switch status {
+    case .satisfied:
+      return "satisfied"
+    case .unsatisfied:
+      return "unsatisfied"
+    case .requiresConnection:
+      return "requiresConnection"
+    @unknown default:
+      return "unknown"
+    }
   }
 }

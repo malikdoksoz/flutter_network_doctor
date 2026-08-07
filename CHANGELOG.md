@@ -1,3 +1,16 @@
+## 0.3.0
+
+- Added optional local-gateway reachability checks using bounded TCP attempts.
+- Added optional repeated TCP quality sampling with minimum, average, p95,
+  maximum, jitter, and failed-sample percentage metrics.
+- Added structured gateway and quality results to versioned JSON reports.
+- Added Apple native path status reporting and avoided publishing IP/DNS
+  capability flags from an unsatisfied path snapshot.
+- Expanded full redaction to cover probe hosts, endpoint URIs, redirect
+  locations, and sensitive values embedded in probe messages.
+- Added deterministic metric, socket, configuration, serialization, and Web
+  fallback tests.
+
 ## 0.2.0
 
 - Added native Android, iOS, and macOS network characteristics.

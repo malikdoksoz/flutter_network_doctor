@@ -3,6 +3,7 @@ final class NetworkDoctorConfig {
   /// Creates a configuration.
   NetworkDoctorConfig({
     List<Uri>? internetEndpoints,
+    List<int>? gatewayPorts,
     this.timeout = const Duration(seconds: 4),
     this.overallTimeout = const Duration(seconds: 15),
     this.dnsHost = 'example.com',
@@ -19,10 +20,21 @@ final class NetworkDoctorConfig {
     this.includeTlsProbe = true,
     this.includeIpVersionProbes = true,
     this.includePlatformInfo = true,
+    this.includeGatewayProbe = false,
+    this.gatewayProbeTimeout = const Duration(milliseconds: 750),
+    this.includeNetworkQualityProbe = false,
+    this.networkQualityHost = '1.1.1.1',
+    this.networkQualityPort = 443,
+    this.networkQualitySampleCount = 5,
+    this.networkQualitySampleTimeout = const Duration(seconds: 1),
+    this.networkQualitySampleInterval = const Duration(milliseconds: 100),
     this.healthPolicy = NetworkHealthPolicy.balanced,
   }) : internetEndpoints = List<Uri>.unmodifiable(
          internetEndpoints ??
              <Uri>[Uri.https('one.one.one.one'), Uri.https('icanhazip.com')],
+       ),
+       gatewayPorts = List<int>.unmodifiable(
+         gatewayPorts ?? <int>[53, 80, 443],
        ) {
     if (this.internetEndpoints.isEmpty) {
       throw ArgumentError.value(
@@ -56,6 +68,23 @@ final class NetworkDoctorConfig {
         'Must be greater than zero.',
       );
     }
+    if (gatewayProbeTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        gatewayProbeTimeout,
+        'gatewayProbeTimeout',
+        'Must be greater than zero.',
+      );
+    }
+    if (this.gatewayPorts.isEmpty) {
+      throw ArgumentError.value(
+        this.gatewayPorts,
+        'gatewayPorts',
+        'At least one gateway port is required.',
+      );
+    }
+    for (final port in this.gatewayPorts) {
+      _validatePort(port, 'gatewayPorts');
+    }
     if (minimumInternetSuccesses < 1 ||
         minimumInternetSuccesses > this.internetEndpoints.length) {
       throw ArgumentError.value(
@@ -64,17 +93,36 @@ final class NetworkDoctorConfig {
         'Must be between 1 and internetEndpoints.length.',
       );
     }
-    if (tcpPort < 1 || tcpPort > 65535) {
-      throw ArgumentError.value(tcpPort, 'tcpPort', 'Invalid TCP port.');
+    _validatePort(tcpPort, 'tcpPort');
+    _validatePort(tlsPort, 'tlsPort');
+    _validatePort(networkQualityPort, 'networkQualityPort');
+    if (networkQualitySampleCount < 2 || networkQualitySampleCount > 20) {
+      throw ArgumentError.value(
+        networkQualitySampleCount,
+        'networkQualitySampleCount',
+        'Must be between 2 and 20.',
+      );
     }
-    if (tlsPort < 1 || tlsPort > 65535) {
-      throw ArgumentError.value(tlsPort, 'tlsPort', 'Invalid TLS port.');
+    if (networkQualitySampleTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        networkQualitySampleTimeout,
+        'networkQualitySampleTimeout',
+        'Must be greater than zero.',
+      );
+    }
+    if (networkQualitySampleInterval < Duration.zero) {
+      throw ArgumentError.value(
+        networkQualitySampleInterval,
+        'networkQualitySampleInterval',
+        'Must not be negative.',
+      );
     }
     _validateHost(dnsHost, 'dnsHost');
     _validateHost(tcpHost, 'tcpHost');
     _validateHost(tlsHost, 'tlsHost');
     _validateHost(ipv4Host, 'ipv4Host');
     _validateHost(ipv6Host, 'ipv6Host');
+    _validateHost(networkQualityHost, 'networkQualityHost');
   }
 
   static void _validateHost(String value, String name) {
@@ -83,8 +131,17 @@ final class NetworkDoctorConfig {
     }
   }
 
+  static void _validatePort(int value, String name) {
+    if (value < 1 || value > 65535) {
+      throw ArgumentError.value(value, name, 'Invalid TCP port.');
+    }
+  }
+
   /// Endpoints used to verify real internet reachability.
   final List<Uri> internetEndpoints;
+
+  /// TCP ports attempted when checking local gateway reachability.
+  final List<int> gatewayPorts;
 
   /// Timeout applied to each individual probe.
   final Duration timeout;
@@ -133,6 +190,35 @@ final class NetworkDoctorConfig {
 
   /// Whether native platform network metadata should be collected.
   final bool includePlatformInfo;
+
+  /// Whether to test the local Wi-Fi gateway with short TCP attempts.
+  ///
+  /// Disabled by default because it adds local-network traffic and can require
+  /// host-application permission on newer operating systems.
+  final bool includeGatewayProbe;
+
+  /// Timeout applied to each gateway port attempt.
+  final Duration gatewayProbeTimeout;
+
+  /// Whether to collect repeated TCP connection quality samples.
+  ///
+  /// Disabled by default because it adds network traffic and diagnostic time.
+  final bool includeNetworkQualityProbe;
+
+  /// Host used for repeated TCP quality samples.
+  final String networkQualityHost;
+
+  /// Port used for repeated TCP quality samples.
+  final int networkQualityPort;
+
+  /// Number of repeated quality samples, from 2 to 20.
+  final int networkQualitySampleCount;
+
+  /// Timeout applied to each quality sample.
+  final Duration networkQualitySampleTimeout;
+
+  /// Delay between consecutive quality samples.
+  final Duration networkQualitySampleInterval;
 
   /// Policy used to derive the overall [NetworkHealth] value.
   final NetworkHealthPolicy healthPolicy;
