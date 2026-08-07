@@ -4,7 +4,7 @@
 [![pub package](https://img.shields.io/pub/v/flutter_network_doctor.svg)](https://pub.dev/packages/flutter_network_doctor)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Production-grade network diagnostics for Flutter applications, maintained by [Malik](https://github.com/malikdoksoz).
+Production-grade network diagnostics for Flutter applications.
 
 Instead of only answering “Wi-Fi or mobile?”, `flutter_network_doctor` builds a structured support report from operating-system connectivity state, real HTTP reachability, Wi-Fi/LAN metadata, DNS timing, TCP/TLS connection timing, and separate IPv4/IPv6 route checks.
 
