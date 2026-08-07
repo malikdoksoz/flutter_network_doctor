@@ -61,19 +61,6 @@ The screenshots come from a real iOS Simulator diagnostic run. Network addresses
 
 The effective platform minimums come from the package's current `network_info_plus` dependency.
 
-## Installation
-
-```yaml
-dependencies:
-  flutter_network_doctor: ^0.3.0
-```
-
-Then install dependencies:
-
-```bash
-flutter pub get
-```
-
 ## Quick start
 
 ```dart
