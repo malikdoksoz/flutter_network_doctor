@@ -1,3 +1,8 @@
+## 0.3.1
+
+- Fixed README screenshots on pub.dev by using GitHub-hosted image URLs.
+- Reduced pub version-badge cache time so new releases appear sooner.
+
 ## 0.3.0
 
 - Added optional local-gateway reachability checks using bounded TCP attempts.
