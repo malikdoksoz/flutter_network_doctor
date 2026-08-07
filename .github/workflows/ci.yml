@@ -105,6 +105,7 @@ jobs:
         if: matrix.target == 'Web'
         run: sudo apt-get update && sudo apt-get install -y xvfb
       - uses: browser-actions/setup-chrome@v2
+        id: setup-chrome
         if: matrix.target == 'Web'
         with:
           install-chromedriver: true
@@ -113,6 +114,8 @@ jobs:
         run: chromedriver --port=4444 &
       - run: flutter pub get
       - run: ${{ matrix.command }}
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
 
   integration-android:
     name: Integration Android
