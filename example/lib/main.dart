@@ -46,6 +46,10 @@ class _NetworkDoctorPageState extends State<_NetworkDoctorPage> {
 
     try {
       final report = await _doctor.diagnose(
+        config: NetworkDoctorConfig(
+          includeGatewayProbe: true,
+          includeNetworkQualityProbe: true,
+        ),
         cancellationToken: cancellationToken,
         onProgress: (NetworkDoctorProgress progress) {
           if (mounted) {

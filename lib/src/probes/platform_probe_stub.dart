@@ -31,6 +31,43 @@ final class PlatformNetworkProbeImpl implements PlatformNetworkProbe {
   );
 
   @override
+  Future<GatewayProbeOutcome> gateway(
+    String? address,
+    List<int> ports,
+    Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
+  ) async => GatewayProbeOutcome(
+    probe: NetworkProbeResult(
+      name: 'gateway',
+      status: ProbeStatus.unsupported,
+      message:
+          'Local gateway socket checks are not supported on this platform.',
+      metadata: <String, Object?>{'address': ?address, 'ports': ports},
+    ),
+  );
+
+  @override
+  Future<NetworkQualityProbeOutcome> networkQuality(
+    String host,
+    int port,
+    int sampleCount,
+    Duration sampleTimeout,
+    Duration sampleInterval,
+    NetworkDoctorRunCancellation cancellation,
+  ) async => NetworkQualityProbeOutcome(
+    probe: NetworkProbeResult(
+      name: 'networkQuality',
+      status: ProbeStatus.unsupported,
+      message: 'TCP quality sampling is not supported on this platform.',
+      metadata: <String, Object?>{
+        'targetHost': host,
+        'targetPort': port,
+        'sampleCount': sampleCount,
+      },
+    ),
+  );
+
+  @override
   Future<NetworkProbeResult> tcp(
     String host,
     int port,

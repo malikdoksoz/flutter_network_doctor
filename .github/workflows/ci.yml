@@ -3,7 +3,21 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - 'screenshots/**'
+      - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'screenshots/**'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -27,8 +41,39 @@ jobs:
         working-directory: example
       - run: dart pub publish --dry-run
 
-  build:
-    name: Build ${{ matrix.target }}
+  build-pr:
+    name: PR Build ${{ matrix.target }}
+    if: github.event_name == 'pull_request'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: Android
+            os: ubuntu-latest
+            command: flutter build apk --debug
+          - target: iOS
+            os: macos-latest
+            command: flutter build ios --simulator --no-codesign
+          - target: Web
+            os: ubuntu-latest
+            command: flutter build web --wasm
+    defaults:
+      run:
+        working-directory: example
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: ${{ matrix.command }}
+
+  build-release:
+    name: Release Build ${{ matrix.target }}
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -70,6 +115,7 @@ jobs:
 
   integration:
     name: Integration ${{ matrix.target }}
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -79,7 +125,7 @@ jobs:
         include:
           - target: Web
             os: ubuntu-latest
-            command: xvfb-run -a flutter drive --driver=test_driver/integration_test.dart --target=integration_test/network_doctor_integration_test.dart -d chrome
+            command: xvfb-run -a flutter drive --driver=test_driver/integration_test.dart --target=integration_test/network_doctor_integration_test.dart -d chrome --chrome-binary="$CHROME_EXECUTABLE"
           - target: Linux
             os: ubuntu-latest
             command: xvfb-run -a flutter test integration_test/network_doctor_integration_test.dart -d linux
@@ -122,6 +168,7 @@ jobs:
 
   integration-android:
     name: Integration Android
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -149,6 +196,7 @@ jobs:
 
   integration-ios:
     name: Integration iOS
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: macos-latest
     timeout-minutes: 30
@@ -169,4 +217,4 @@ jobs:
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
           echo "IOS_DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
-      - run: flutter test integration_test/network_doctor_integration_test.dart -d "$IOS_DEVICE_ID"
+      - run: flutter drive --driver=test_driver/integration_test.dart --target=integration_test/network_doctor_integration_test.dart -d "$IOS_DEVICE_ID"

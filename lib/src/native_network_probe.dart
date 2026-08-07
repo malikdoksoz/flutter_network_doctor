@@ -116,6 +116,7 @@ final class NativeNetworkProbe {
         supportsIpv4: _bool(data['supportsIpv4']),
         supportsIpv6: _bool(data['supportsIpv6']),
         supportsDns: _bool(data['supportsDns']),
+        pathStatus: _pathStatus(_string(data['pathStatus'])),
         localNetworkPermission: _permission(
           _string(data['localNetworkPermission']),
         ),
@@ -128,6 +129,15 @@ final class NativeNetworkProbe {
   static String? _string(Object? value) => value is String ? value : null;
 
   static bool? _bool(Object? value) => value is bool ? value : null;
+
+  static NetworkPathStatus _pathStatus(String? value) {
+    for (final status in NetworkPathStatus.values) {
+      if (status.name == value) {
+        return status;
+      }
+    }
+    return NetworkPathStatus.unknown;
+  }
 
   static LocalNetworkPermissionStatus _permission(String? value) {
     for (final status in LocalNetworkPermissionStatus.values) {

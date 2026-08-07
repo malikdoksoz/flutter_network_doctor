@@ -231,6 +231,7 @@ void main() {
         'supportsIpv4': true,
         'supportsIpv6': false,
         'supportsDns': true,
+        'pathStatus': 'satisfied',
         'localNetworkPermission': 'notRequired',
       };
     });
@@ -258,6 +259,7 @@ void main() {
 
     expect(report.platform?.dnsServers, <String>['192.168.1.1']);
     expect(report.platform?.isValidated, isTrue);
+    expect(report.platform?.pathStatus, NetworkPathStatus.satisfied);
     expect(
       report.platform?.localNetworkPermission,
       LocalNetworkPermissionStatus.notRequired,

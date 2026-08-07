@@ -87,6 +87,149 @@ enum NetworkHealth {
   unknown,
 }
 
+/// Transport used to sample connection quality.
+enum NetworkQualityMeasurementMethod {
+  /// Repeated TCP connection setup measurements.
+  tcpConnect,
+}
+
+/// Availability state of an Apple network path snapshot.
+enum NetworkPathStatus {
+  /// The path can currently carry network traffic.
+  satisfied,
+
+  /// The path is currently unavailable.
+  unsatisfied,
+
+  /// The path may become available after an action such as joining a network.
+  requiresConnection,
+
+  /// The platform did not expose a path state.
+  unknown,
+}
+
+/// Whether the local gateway responded at the network layer.
+enum GatewayReachability {
+  /// A TCP connection succeeded or the gateway actively refused it.
+  reachable,
+
+  /// Every configured TCP attempt timed out or failed before reaching the
+  /// gateway.
+  unreachable,
+}
+
+/// Result of probing the local Wi-Fi gateway.
+final class GatewayReachabilityResult {
+  /// Creates a gateway reachability result.
+  GatewayReachabilityResult({
+    required this.address,
+    required List<int> testedPorts,
+    required this.reachability,
+    required this.duration,
+  }) : testedPorts = List<int>.unmodifiable(testedPorts);
+
+  /// Gateway address that was tested.
+  final String address;
+
+  /// TCP ports attempted in order.
+  final List<int> testedPorts;
+
+  /// Network-layer reachability classification.
+  final GatewayReachability reachability;
+
+  /// Total time spent testing the gateway.
+  final Duration duration;
+
+  /// Converts this value to JSON-compatible data.
+  Map<String, Object?> toJson({bool redactNetworkAddresses = false}) =>
+      <String, Object?>{
+        'address': redactNetworkAddresses ? '<redacted>' : address,
+        'testedPorts': testedPorts,
+        'reachability': reachability.name,
+        'durationMs': duration.inMicroseconds / 1000,
+      };
+}
+
+/// Aggregated quality metrics from repeated network samples.
+///
+/// [packetLossPercent] is the percentage of failed TCP connection samples. It
+/// is not an ICMP packet-loss measurement.
+final class NetworkQualityResult {
+  /// Creates a network quality result.
+  NetworkQualityResult({
+    required this.method,
+    required this.targetHost,
+    required this.targetPort,
+    required this.sampleCount,
+    required this.successfulSamples,
+    required this.failedSamples,
+    required this.packetLossPercent,
+    required List<double?> samplesMs,
+    this.minimumLatencyMs,
+    this.averageLatencyMs,
+    this.p95LatencyMs,
+    this.maximumLatencyMs,
+    this.jitterMs,
+  }) : samplesMs = List<double?>.unmodifiable(samplesMs);
+
+  /// Measurement transport.
+  final NetworkQualityMeasurementMethod method;
+
+  /// Host sampled by the measurement.
+  final String targetHost;
+
+  /// TCP port sampled by the measurement.
+  final int targetPort;
+
+  /// Number of requested samples.
+  final int sampleCount;
+
+  /// Number of samples that established a TCP connection.
+  final int successfulSamples;
+
+  /// Number of failed or timed-out samples.
+  final int failedSamples;
+
+  /// Percentage of failed TCP samples from 0 to 100.
+  final double packetLossPercent;
+
+  /// Per-sample connection latency in milliseconds; `null` marks a failure.
+  final List<double?> samplesMs;
+
+  /// Lowest successful connection latency in milliseconds.
+  final double? minimumLatencyMs;
+
+  /// Mean successful connection latency in milliseconds.
+  final double? averageLatencyMs;
+
+  /// Nearest-rank 95th percentile latency in milliseconds.
+  final double? p95LatencyMs;
+
+  /// Highest successful connection latency in milliseconds.
+  final double? maximumLatencyMs;
+
+  /// Mean absolute difference between consecutive successful samples.
+  final double? jitterMs;
+
+  /// Converts this value to JSON-compatible data.
+  Map<String, Object?> toJson({bool redactNetworkAddresses = false}) =>
+      <String, Object?>{
+        'method': method.name,
+        'targetHost': redactNetworkAddresses ? '<redacted>' : targetHost,
+        'targetPort': targetPort,
+        'sampleCount': sampleCount,
+        'successfulSamples': successfulSamples,
+        'failedSamples': failedSamples,
+        'packetLossPercent': packetLossPercent,
+        'minimumLatencyMs': minimumLatencyMs,
+        'averageLatencyMs': averageLatencyMs,
+        'p95LatencyMs': p95LatencyMs,
+        'maximumLatencyMs': maximumLatencyMs,
+        'jitterMs': jitterMs,
+        'samplesMs': samplesMs,
+      };
+}
+
 /// Result of one network diagnostic probe.
 final class NetworkProbeResult {
   /// Creates a probe result.
@@ -126,7 +269,9 @@ final class NetworkProbeResult {
         'name': name,
         'status': status.name,
         'durationMs': duration?.inMilliseconds,
-        'message': message,
+        'message': redactNetworkAddresses
+            ? _redactProbeMessage(message, metadata)
+            : message,
         'errorCode': errorCode?.name,
         'metadata': redactNetworkAddresses
             ? _redactProbeMetadata(metadata)
@@ -134,19 +279,55 @@ final class NetworkProbeResult {
       };
 }
 
+const _sensitiveProbeMetadataKeys = <String>{
+  'address',
+  'addresses',
+  'host',
+  'targetHost',
+  'uri',
+  'location',
+  'dnsServers',
+  'routes',
+  'interfaceName',
+  'proxy',
+  'privateDnsServerName',
+};
+
 Map<String, Object?> _redactProbeMetadata(Map<String, Object?> metadata) =>
     metadata.map((String key, Object? value) {
-      if (key == 'address' ||
-          key == 'addresses' ||
-          key == 'dnsServers' ||
-          key == 'routes' ||
-          key == 'interfaceName' ||
-          key == 'proxy' ||
-          key == 'privateDnsServerName') {
+      if (value != null && _sensitiveProbeMetadataKeys.contains(key)) {
         return MapEntry<String, Object?>(key, '<redacted>');
       }
       return MapEntry<String, Object?>(key, value);
     });
+
+String? _redactProbeMessage(String? message, Map<String, Object?> metadata) {
+  if (message == null) {
+    return null;
+  }
+  final sensitiveValues = <String>[];
+  for (final entry in metadata.entries) {
+    if (_sensitiveProbeMetadataKeys.contains(entry.key)) {
+      _collectStrings(entry.value, sensitiveValues);
+    }
+  }
+  sensitiveValues.sort((String a, String b) => b.length.compareTo(a.length));
+  return sensitiveValues.fold<String>(
+    message,
+    (String value, String sensitive) =>
+        sensitive.isEmpty ? value : value.replaceAll(sensitive, '<redacted>'),
+  );
+}
+
+void _collectStrings(Object? value, List<String> output) {
+  if (value is String) {
+    output.add(value);
+  } else if (value is Iterable<Object?>) {
+    for (final item in value) {
+      _collectStrings(item, output);
+    }
+  }
+}
 
 /// Wi-Fi and local-network metadata.
 final class WifiNetworkInfo {
@@ -253,6 +434,7 @@ final class PlatformNetworkInfo {
     this.supportsIpv4,
     this.supportsIpv6,
     this.supportsDns,
+    this.pathStatus = NetworkPathStatus.unknown,
     this.localNetworkPermission = LocalNetworkPermissionStatus.unsupported,
   });
 
@@ -298,6 +480,9 @@ final class PlatformNetworkInfo {
   /// Whether the active path has DNS support.
   final bool? supportsDns;
 
+  /// Native path availability on Apple platforms.
+  final NetworkPathStatus pathStatus;
+
   /// Android 17 local-network permission readiness.
   final LocalNetworkPermissionStatus localNetworkPermission;
 
@@ -327,6 +512,7 @@ final class PlatformNetworkInfo {
         'supportsIpv4': supportsIpv4,
         'supportsIpv6': supportsIpv6,
         'supportsDns': supportsDns,
+        'pathStatus': pathStatus.name,
         'localNetworkPermission': localNetworkPermission.name,
       };
 }
@@ -345,6 +531,8 @@ final class NetworkDoctorReport {
     this.totalDuration,
     this.wifi,
     this.platform,
+    this.gatewayReachability,
+    this.networkQuality,
     this.captivePortalSuspected = false,
   });
 
@@ -378,6 +566,12 @@ final class NetworkDoctorReport {
   /// Native platform network characteristics, when supported.
   final PlatformNetworkInfo? platform;
 
+  /// Local Wi-Fi gateway reachability, when enabled and available.
+  final GatewayReachabilityResult? gatewayReachability;
+
+  /// Repeated TCP connection quality metrics, when enabled and supported.
+  final NetworkQualityResult? networkQuality;
+
   /// Heuristic indication that HTTP probes were redirected unexpectedly.
   ///
   /// This is not proof of a captive portal and should be treated as a hint.
@@ -409,6 +603,12 @@ final class NetworkDoctorReport {
       redactNetworkAddresses: redactNetworkAddresses,
     ),
     'platform': platform?.toJson(
+      redactNetworkAddresses: redactNetworkAddresses,
+    ),
+    'gatewayReachability': gatewayReachability?.toJson(
+      redactNetworkAddresses: redactNetworkAddresses,
+    ),
+    'networkQuality': networkQuality?.toJson(
       redactNetworkAddresses: redactNetworkAddresses,
     ),
     'probes': probes
