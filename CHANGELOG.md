@@ -1,3 +1,8 @@
+## 0.3.3
+
+- Fixed the CI badge to track successful pushes to the main branch.
+- Removed the cached pub version badge; the package header remains the source of truth for the current version.
+
 ## 0.3.2
 
 - Added pub.dev package screenshots for the network diagnostics example.
