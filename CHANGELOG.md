@@ -10,6 +10,8 @@
   locations, and sensitive values embedded in probe messages.
 - Added deterministic metric, socket, configuration, serialization, and Web
   fallback tests.
+- Split CI into fast pull-request checks and complete main/tag/manual matrices,
+  with deterministic integration clients and stale-run cancellation.
 
 ## 0.2.0
 

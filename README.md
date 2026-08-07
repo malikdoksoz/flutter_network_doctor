@@ -258,10 +258,16 @@ cd ..
 dart pub publish --dry-run
 ```
 
-The CI workflow builds all six targets and runs the integration smoke test on
-Android, iOS, Linux, macOS, Windows, and Web. The root performance regression
-tests also verify concurrent HTTP probe scheduling and bounded overall
-deadlines without relying on timing-sensitive external services.
+CI uses two tiers. Pull requests run formatting, analysis, VM/Web tests, the
+publish dry-run, and Android, iOS, and WebAssembly builds for fast feedback.
+The `main` and manual workflows run the integration smoke test on Android,
+iOS, Linux, macOS, Windows, and Web. Version tags and manual workflows build
+all six release targets. Documentation-only changes skip the heavy jobs, and
+new commits cancel stale runs automatically.
+
+Integration and performance regression tests use deterministic local clients
+and sockets. They verify registered platform plugins, concurrent HTTP probe
+scheduling, and bounded deadlines without relying on external services.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 

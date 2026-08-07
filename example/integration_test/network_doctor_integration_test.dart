@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_network_doctor/flutter_network_doctor.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:integration_test/integration_test.dart';
 
 void main() {
@@ -9,17 +11,22 @@ void main() {
   testWidgets('diagnostics complete through the registered platform plugins', (
     WidgetTester tester,
   ) async {
-    final doctor = FlutterNetworkDoctor();
+    final doctor = FlutterNetworkDoctor(
+      httpClient: MockClient(
+        (http.Request request) async =>
+            http.Response('', 204, request: request),
+      ),
+    );
     addTearDown(doctor.dispose);
     final progress = <NetworkDoctorProgress>[];
 
     final report = await doctor.diagnose(
       config: NetworkDoctorConfig(
         internetEndpoints: <Uri>[
-          Uri.parse('http://127.0.0.1:9/network-doctor-smoke'),
+          Uri.https('integration.example', '/network-doctor-smoke'),
         ],
-        timeout: const Duration(seconds: 5),
-        overallTimeout: const Duration(seconds: 12),
+        timeout: const Duration(seconds: 2),
+        overallTimeout: const Duration(seconds: 8),
         includeWifiInfo: false,
         includeDnsProbe: false,
         includeTcpProbe: false,
