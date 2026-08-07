@@ -7,8 +7,12 @@ import 'package:network_info_plus_platform_interface/network_info_plus_platform_
 
 import 'cancellation.dart';
 import 'config.dart';
+import 'connectivity_source.dart';
 import 'models.dart';
+import 'monitor_config.dart';
 import 'native_network_probe.dart';
+import 'network_doctor_monitor.dart';
+import 'network_status.dart';
 import 'probes/platform_probe.dart';
 import 'run_cancellation.dart';
 
@@ -22,13 +26,13 @@ final class FlutterNetworkDoctor {
   FlutterNetworkDoctor({http.Client? httpClient})
     : _httpClient = httpClient ?? http.Client(),
       _ownsHttpClient = httpClient == null,
-      _connectivity = const _ConnectivityReader(),
+      _connectivity = const ConnectivitySource(),
       _networkInfo = const _NetworkInfoReader(),
       _platformProbe = createPlatformNetworkProbe();
 
   final http.Client _httpClient;
   final bool _ownsHttpClient;
-  final _ConnectivityReader _connectivity;
+  final ConnectivitySource _connectivity;
   final _NetworkInfoReader _networkInfo;
   final PlatformNetworkProbe _platformProbe;
   final NativeNetworkProbe _nativeNetworkProbe = const NativeNetworkProbe();
@@ -111,23 +115,13 @@ final class FlutterNetworkDoctor {
       ),
     );
 
-    final connectivityFuture = _safeConnectivityCheck(
-      config.timeout,
-      cancellation,
-    );
+    final connectivityFuture = _readConnectivity(config.timeout, cancellation);
     final wifiFuture = config.includeWifiInfo
         ? _collectWifiInfo(config.timeout, cancellation)
         : Future<WifiNetworkInfo?>.value();
-    final (connectivityResults, wifi) = await (
-      connectivityFuture,
-      wifiFuture,
-    ).wait;
+    final (connectivity, wifi) = await (connectivityFuture, wifiFuture).wait;
 
-    final transportSet = connectivityResults.map(_mapTransport).toSet();
-    if (transportSet.length > 1) {
-      transportSet.remove(NetworkTransport.none);
-    }
-    final transports = List<NetworkTransport>.unmodifiable(transportSet);
+    final transports = _toTransports(connectivity.results);
 
     final probeFutures = <Future<NetworkProbeResult>>[];
     Future<NativeNetworkProbeOutcome>? nativeOutcomeFuture;
@@ -255,18 +249,11 @@ final class FlutterNetworkDoctor {
 
     final ipv4Result = _findProbe(probes, 'ipv4');
     final ipv6Result = _findProbe(probes, 'ipv6');
-    final captivePortalSuspected =
-        (platformInfo?.captivePortalDetected ?? false) ||
-        (!hasInternet &&
-            httpProbes.any((NetworkProbeResult result) {
-              final statusCode = result.metadata['statusCode'];
-              final location = result.metadata['location'];
-              return statusCode is int &&
-                  statusCode >= 300 &&
-                  statusCode < 400 &&
-                  location is String &&
-                  location.isNotEmpty;
-            }));
+    final captivePortalSuspected = _suspectsCaptivePortal(
+      hasInternet: hasInternet,
+      httpProbes: httpProbes,
+      nativeCaptivePortalDetected: platformInfo?.captivePortalDetected ?? false,
+    );
 
     final hasTransport = transports.any(
       (NetworkTransport transport) => transport != NetworkTransport.none,
@@ -299,6 +286,112 @@ final class FlutterNetworkDoctor {
     );
   }
 
+  /// Runs a lightweight reachability check and returns a status snapshot.
+  ///
+  /// A check answers "can this application reach the internet right now?" and
+  /// is designed to complete well under a second, which makes it suitable for
+  /// running on every network change. Use [diagnose] when the answer is "no"
+  /// and the application needs to know why.
+  ///
+  /// When the operating system reports no active transport and
+  /// [NetworkCheckConfig.skipProbesWhenOffline] is enabled, the check returns
+  /// immediately without producing any network traffic.
+  ///
+  /// Throws [NetworkDoctorCancelledException] when [cancellationToken] is
+  /// cancelled and [NetworkDoctorTimeoutException] when the configured overall
+  /// deadline is exceeded.
+  Future<NetworkStatus> check({
+    NetworkCheckConfig? config,
+    NetworkDoctorCancellationToken? cancellationToken,
+  }) async {
+    final effectiveConfig = config ?? NetworkCheckConfig();
+    final stopwatch = Stopwatch()..start();
+    final cancellation = NetworkDoctorRunCancellation(
+      overallTimeout: effectiveConfig.overallTimeout,
+      externalToken: cancellationToken,
+    );
+
+    try {
+      final connectivity = await _readConnectivity(
+        effectiveConfig.timeout,
+        cancellation,
+      );
+      final transports = _toTransports(connectivity.results);
+      final hasTransport = transports.any(
+        (NetworkTransport transport) => transport != NetworkTransport.none,
+      );
+
+      if (effectiveConfig.skipProbesWhenOffline &&
+          connectivity.succeeded &&
+          !hasTransport) {
+        stopwatch.stop();
+        return NetworkStatus(
+          timestamp: DateTime.now(),
+          transports: transports,
+          hasInternet: false,
+          health: NetworkHealth.offline,
+          probes: const <NetworkProbeResult>[],
+          duration: stopwatch.elapsed,
+        );
+      }
+
+      final probes = await Future.wait(<Future<NetworkProbeResult>>[
+        for (final endpoint in effectiveConfig.endpoints)
+          _httpProbe(endpoint, effectiveConfig.timeout, cancellation),
+        if (effectiveConfig.includeDnsProbe)
+          _platformProbe.dns(
+            effectiveConfig.dnsHost,
+            effectiveConfig.timeout,
+            cancellation,
+          ),
+      ]);
+
+      final httpProbes = probes.where(
+        (NetworkProbeResult result) => result.name.startsWith('http:'),
+      );
+      final successfulHttpProbes = httpProbes
+          .where((NetworkProbeResult result) => result.isSuccess)
+          .length;
+      final hasInternet =
+          successfulHttpProbes >= effectiveConfig.minimumInternetSuccesses;
+      final captivePortalSuspected = _suspectsCaptivePortal(
+        hasInternet: hasInternet,
+        httpProbes: httpProbes,
+      );
+
+      stopwatch.stop();
+      return NetworkStatus(
+        timestamp: DateTime.now(),
+        transports: transports,
+        hasInternet: hasInternet,
+        health: _evaluateHealth(
+          hasTransport: hasTransport,
+          hasInternet: hasInternet,
+          captivePortalSuspected: captivePortalSuspected,
+          probes: probes,
+          policy: effectiveConfig.healthPolicy,
+        ),
+        probes: List<NetworkProbeResult>.unmodifiable(probes),
+        duration: stopwatch.elapsed,
+        captivePortalSuspected: captivePortalSuspected,
+      );
+    } on Object {
+      cancellation.throwIfCancelled();
+      rethrow;
+    } finally {
+      stopwatch.stop();
+      await cancellation.finish();
+    }
+  }
+
+  /// Creates a monitor that watches network state continuously.
+  ///
+  /// The returned monitor reuses this doctor and never disposes it, so this
+  /// instance stays valid for further [diagnose] and [check] calls. Call
+  /// `NetworkDoctorMonitor.start` to begin watching.
+  NetworkDoctorMonitor monitor({NetworkMonitorConfig? config}) =>
+      NetworkDoctorMonitor.attached(this, config: config);
+
   /// Releases resources owned by this instance.
   ///
   /// A caller-supplied HTTP client is never closed.
@@ -308,20 +401,50 @@ final class FlutterNetworkDoctor {
     }
   }
 
-  Future<List<ConnectivityResult>> _safeConnectivityCheck(
+  /// Reads operating-system connectivity, reporting whether the read itself
+  /// succeeded.
+  ///
+  /// Callers must not treat the `none` fallback of a failed read as proof that
+  /// the device is offline.
+  ///
+  /// A first read that reports no transport is confirmed by a second one.
+  /// Apple platforms tear down their network path monitor when the last
+  /// connectivity stream listener is cancelled; the next read restarts the
+  /// monitor and observes its still-unsatisfied initial path, which reports
+  /// `none` on a device that is online. The restarted monitor has settled by
+  /// the time a second read completes, so no delay is needed.
+  Future<({List<ConnectivityResult> results, bool succeeded})>
+  _readConnectivity(
+    Duration timeout,
+    NetworkDoctorRunCancellation cancellation,
+  ) async {
+    final first = await _readConnectivityOnce(timeout, cancellation);
+    if (!first.succeeded || _reportsAnyTransport(first.results)) {
+      return first;
+    }
+    final second = await _readConnectivityOnce(timeout, cancellation);
+    return second.succeeded ? second : first;
+  }
+
+  Future<({List<ConnectivityResult> results, bool succeeded})>
+  _readConnectivityOnce(
     Duration timeout,
     NetworkDoctorRunCancellation cancellation,
   ) async {
     try {
-      return await cancellation.guard(
+      final results = await cancellation.guard(
         _connectivity.checkConnectivity().timeout(timeout),
       );
+      return (results: results, succeeded: true);
     } on NetworkDoctorCancelledException {
       rethrow;
     } on NetworkDoctorTimeoutException {
       rethrow;
     } on Object {
-      return const <ConnectivityResult>[ConnectivityResult.none];
+      return (
+        results: const <ConnectivityResult>[ConnectivityResult.none],
+        succeeded: false,
+      );
     }
   }
 
@@ -441,6 +564,36 @@ final class FlutterNetworkDoctor {
     }
   }
 
+  static bool _reportsAnyTransport(List<ConnectivityResult> results) => results
+      .any((ConnectivityResult result) => result != ConnectivityResult.none);
+
+  static List<NetworkTransport> _toTransports(
+    List<ConnectivityResult> results,
+  ) {
+    final transportSet = results.map(_mapTransport).toSet();
+    if (transportSet.length > 1) {
+      transportSet.remove(NetworkTransport.none);
+    }
+    return List<NetworkTransport>.unmodifiable(transportSet);
+  }
+
+  static bool _suspectsCaptivePortal({
+    required bool hasInternet,
+    required Iterable<NetworkProbeResult> httpProbes,
+    bool nativeCaptivePortalDetected = false,
+  }) =>
+      nativeCaptivePortalDetected ||
+      (!hasInternet &&
+          httpProbes.any((NetworkProbeResult result) {
+            final statusCode = result.metadata['statusCode'];
+            final location = result.metadata['location'];
+            return statusCode is int &&
+                statusCode >= 300 &&
+                statusCode < 400 &&
+                location is String &&
+                location.isNotEmpty;
+          }));
+
   static NetworkHealth _evaluateHealth({
     required bool hasTransport,
     required bool hasInternet,
@@ -535,13 +688,6 @@ final class FlutterNetworkDoctor {
 
 /// Keeps platform-specific `network_info_plus` exports out of the package's
 /// public import graph while preserving its registered plugin implementations.
-final class _ConnectivityReader {
-  const _ConnectivityReader();
-
-  Future<List<ConnectivityResult>> checkConnectivity() =>
-      ConnectivityPlatform.instance.checkConnectivity();
-}
-
 final class _NetworkInfoReader {
   const _NetworkInfoReader();
 

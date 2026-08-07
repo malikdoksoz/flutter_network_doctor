@@ -5,6 +5,10 @@ export 'src/cancellation.dart';
 export 'src/config.dart';
 export 'src/flutter_network_doctor_base.dart';
 export 'src/models.dart';
+export 'src/monitor_config.dart';
+export 'src/monitor_events.dart';
+export 'src/network_doctor_monitor.dart';
+export 'src/network_status.dart';
 
 /// No-op registration entry point for Dart-only desktop implementations.
 ///

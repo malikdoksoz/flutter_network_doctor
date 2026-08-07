@@ -60,4 +60,59 @@ void main() {
       expect(report.platform, isNull);
     }
   });
+
+  testWidgets('a monitor observes state through the registered plugins', (
+    WidgetTester tester,
+  ) async {
+    final doctor = FlutterNetworkDoctor(
+      httpClient: MockClient(
+        (http.Request request) async =>
+            http.Response('', 204, request: request),
+      ),
+    );
+    addTearDown(doctor.dispose);
+
+    final monitor = doctor.monitor(
+      config: NetworkMonitorConfig(
+        check: NetworkCheckConfig(
+          endpoints: <Uri>[
+            Uri.https('integration.example', '/network-doctor-smoke'),
+          ],
+          timeout: const Duration(seconds: 2),
+          overallTimeout: const Duration(seconds: 6),
+        ),
+        periodicCheckInterval: const Duration(seconds: 1),
+        runDeepDiagnosisOnFailure: false,
+      ),
+    );
+
+    final status = await monitor.start();
+
+    expect(monitor.isRunning, isTrue);
+    expect(status, isNotNull);
+    expect(status!.hasInternet, isTrue);
+    expect(status.health, NetworkHealth.healthy);
+    expect(status.toJson()['schemaVersion'], 1);
+    expect(monitor.currentStatus, isNotNull);
+
+    // The connectivity stream must survive a stop/start cycle on every
+    // platform, including desktop and web.
+    await monitor.stop();
+    expect(monitor.isRunning, isFalse);
+    expect(await monitor.start(), isNotNull);
+
+    await monitor.dispose();
+    expect(monitor.isRunning, isFalse);
+
+    // The borrowed doctor stays usable after the monitor is disposed.
+    final afterDispose = await doctor.check(
+      config: NetworkCheckConfig(
+        endpoints: <Uri>[
+          Uri.https('integration.example', '/network-doctor-smoke'),
+        ],
+        timeout: const Duration(seconds: 2),
+      ),
+    );
+    expect(afterDispose.hasInternet, isTrue);
+  });
 }

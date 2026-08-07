@@ -36,24 +36,7 @@ final class NetworkDoctorConfig {
        gatewayPorts = List<int>.unmodifiable(
          gatewayPorts ?? <int>[53, 80, 443],
        ) {
-    if (this.internetEndpoints.isEmpty) {
-      throw ArgumentError.value(
-        this.internetEndpoints,
-        'internetEndpoints',
-        'At least one endpoint is required.',
-      );
-    }
-    for (final endpoint in this.internetEndpoints) {
-      if (!endpoint.hasScheme ||
-          !endpoint.hasAuthority ||
-          (endpoint.scheme != 'http' && endpoint.scheme != 'https')) {
-        throw ArgumentError.value(
-          endpoint,
-          'internetEndpoints',
-          'Every endpoint must be an absolute HTTP or HTTPS URI.',
-        );
-      }
-    }
+    _validateEndpoints(this.internetEndpoints, 'internetEndpoints');
     if (timeout <= Duration.zero) {
       throw ArgumentError.value(
         timeout,
@@ -123,18 +106,6 @@ final class NetworkDoctorConfig {
     _validateHost(ipv4Host, 'ipv4Host');
     _validateHost(ipv6Host, 'ipv6Host');
     _validateHost(networkQualityHost, 'networkQualityHost');
-  }
-
-  static void _validateHost(String value, String name) {
-    if (value.trim().isEmpty) {
-      throw ArgumentError.value(value, name, 'Must not be empty.');
-    }
-  }
-
-  static void _validatePort(int value, String name) {
-    if (value < 1 || value > 65535) {
-      throw ArgumentError.value(value, name, 'Invalid TCP port.');
-    }
   }
 
   /// Endpoints used to verify real internet reachability.
@@ -224,6 +195,88 @@ final class NetworkDoctorConfig {
   final NetworkHealthPolicy healthPolicy;
 }
 
+/// Configuration for a lightweight network status check.
+///
+/// A quick check answers "can this application reach the internet right now?"
+/// in well under a second. It deliberately omits the socket-level probes that
+/// a full diagnostic run performs; use `NetworkDoctorConfig` for those.
+final class NetworkCheckConfig {
+  /// Creates a quick-check configuration.
+  NetworkCheckConfig({
+    List<Uri>? endpoints,
+    this.timeout = const Duration(milliseconds: 1500),
+    this.overallTimeout = const Duration(seconds: 3),
+    this.minimumInternetSuccesses = 1,
+    this.includeDnsProbe = false,
+    this.dnsHost = 'example.com',
+    this.skipProbesWhenOffline = true,
+    this.healthPolicy = NetworkHealthPolicy.balanced,
+  }) : endpoints = List<Uri>.unmodifiable(
+         endpoints ?? <Uri>[Uri.https('one.one.one.one')],
+       ) {
+    _validateEndpoints(this.endpoints, 'endpoints');
+    if (timeout <= Duration.zero) {
+      throw ArgumentError.value(
+        timeout,
+        'timeout',
+        'Must be greater than zero.',
+      );
+    }
+    if (overallTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        overallTimeout,
+        'overallTimeout',
+        'Must be greater than zero.',
+      );
+    }
+    if (minimumInternetSuccesses < 1 ||
+        minimumInternetSuccesses > this.endpoints.length) {
+      throw ArgumentError.value(
+        minimumInternetSuccesses,
+        'minimumInternetSuccesses',
+        'Must be between 1 and endpoints.length.',
+      );
+    }
+    _validateHost(dnsHost, 'dnsHost');
+  }
+
+  /// Endpoints used to verify real internet reachability.
+  ///
+  /// Defaults to a single endpoint so a check stays cheap enough to run on
+  /// every network change.
+  final List<Uri> endpoints;
+
+  /// Timeout applied to each individual probe.
+  final Duration timeout;
+
+  /// Maximum duration of the complete check.
+  final Duration overallTimeout;
+
+  /// Number of successful HTTP probes required to consider internet available.
+  final int minimumInternetSuccesses;
+
+  /// Whether to also run a DNS lookup probe.
+  ///
+  /// Disabled by default because it adds latency to every check. The probe
+  /// reports [ProbeStatus.unsupported] on platforms without socket support,
+  /// which never degrades health.
+  final bool includeDnsProbe;
+
+  /// Host used for the optional DNS lookup probe.
+  final String dnsHost;
+
+  /// Whether to skip all probes when the operating system reports no transport.
+  ///
+  /// This makes a check on a disconnected device produce zero network traffic,
+  /// which matters when checks run continuously. The shortcut is only applied
+  /// when the connectivity read itself succeeded, so a failed read is never
+  /// mistaken for an offline device.
+  final bool skipProbesWhenOffline;
+
+  /// Policy used to derive the overall [NetworkHealth] value.
+  final NetworkHealthPolicy healthPolicy;
+}
+
 /// Controls which failed probes degrade an otherwise reachable network.
 enum NetworkHealthPolicy {
   /// DNS, TCP, and TLS failures degrade health; IP-version and redundant HTTP
@@ -235,4 +288,37 @@ enum NetworkHealthPolicy {
 
   /// Only the configured HTTP reachability quorum affects overall health.
   internetOnly,
+}
+
+void _validateEndpoints(List<Uri> endpoints, String name) {
+  if (endpoints.isEmpty) {
+    throw ArgumentError.value(
+      endpoints,
+      name,
+      'At least one endpoint is required.',
+    );
+  }
+  for (final endpoint in endpoints) {
+    if (!endpoint.hasScheme ||
+        !endpoint.hasAuthority ||
+        (endpoint.scheme != 'http' && endpoint.scheme != 'https')) {
+      throw ArgumentError.value(
+        endpoint,
+        name,
+        'Every endpoint must be an absolute HTTP or HTTPS URI.',
+      );
+    }
+  }
+}
+
+void _validateHost(String value, String name) {
+  if (value.trim().isEmpty) {
+    throw ArgumentError.value(value, name, 'Must not be empty.');
+  }
+}
+
+void _validatePort(int value, String name) {
+  if (value < 1 || value > 65535) {
+    throw ArgumentError.value(value, name, 'Invalid TCP port.');
+  }
 }

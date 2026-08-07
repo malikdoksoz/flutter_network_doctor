@@ -1,3 +1,17 @@
+## 0.4.0
+
+- Added `FlutterNetworkDoctor.check()`, a sub-second quick check that returns a `NetworkStatus` and produces no network traffic when the operating system reports no active transport.
+- Added `NetworkDoctorMonitor` and `FlutterNetworkDoctor.monitor()` for continuous watching, exposing a `NetworkStatus` stream, a sealed `NetworkMonitorEvent` stream, `currentStatus`, `latestReport`, and `start`/`stop`/`refresh`/`dispose` lifecycle control.
+- Added online, offline, transport-change, degraded, and recovered events, each carrying the deep diagnostic report produced for the transition.
+- Escalated to a full diagnostic run only when a quick check observes a changed, non-healthy state, so an unchanged network costs one cheap check and a quick-check false positive is never emitted.
+- Debounced operating-system connectivity notifications, re-armed periodic checks after each completed run, coalesced overlapping triggers into a single follow-up, and suppressed emissions that repeat the current state.
+- Paused all monitor work while the application is backgrounded and ran an immediate check on resume, degrading gracefully when no Flutter binding is available.
+- Confirmed a connectivity read that reports no transport with a second read, fixing a false `offline` verdict on Apple platforms whose network path monitor restarts after the last connectivity listener is cancelled.
+- Added `NetworkCheckConfig` and `NetworkMonitorConfig` with validation matching `NetworkDoctorConfig`.
+- Serialized `NetworkStatus` to versioned JSON with the same network-address redaction as reports.
+- Added deterministic quick-check, monitor state-machine, lifecycle, concurrency, and Web fallback tests, plus a monitor lifecycle case to the on-device integration suite.
+- Added a live monitor panel to the example application.
+
 ## 0.3.5
 
 - Added self-updating pub.dev version, score, likes, and publisher badges to the README.

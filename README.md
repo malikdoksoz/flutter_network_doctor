@@ -35,6 +35,9 @@ The screenshots come from a real iOS Simulator diagnostic run. Network addresses
 
 - Active transport detection: Wi-Fi, mobile, Ethernet, VPN, Bluetooth, satellite, and other
 - Real internet verification using a configurable quorum of HTTP endpoints
+- Sub-second quick checks that produce no network traffic on a disconnected device
+- Continuous monitoring with online, offline, transport-change, degraded, and recovered events
+- Two-tier monitoring: cheap checks on every change, full diagnostics only when something breaks
 - Wi-Fi/LAN metadata: SSID, BSSID, local IPv4/IPv6, subnet, broadcast, and gateway
 - DNS lookup, TCP connection, and TLS handshake timing on `dart:io` platforms
 - Separate IPv4 and IPv6 route checks
@@ -152,6 +155,100 @@ try {
 }
 ```
 
+## Quick checks and continuous monitoring
+
+`diagnose()` answers *why* the network is broken. Two lighter APIs answer *whether* it is:
+
+```dart
+final report = await doctor.diagnose();   // deep analysis
+final status = await doctor.check();      // quick check
+final monitor = doctor.monitor();         // continuous watch
+```
+
+A quick check verifies HTTP reachability against a single endpoint with a 1.5 second timeout. When the operating system reports no active transport it returns immediately, producing **no network traffic at all**:
+
+```dart
+final status = await doctor.check();
+
+print(status.health);       // healthy | degraded | localOnly | offline
+print(status.hasInternet);  // true | false
+print(status.transports);   // [wifi], [mobile], [none], ...
+```
+
+A monitor turns that into a stream. It runs a quick check on every operating-system connectivity change, on a periodic timer, and on every application resume — and escalates to a full `diagnose()` only when a check observes a *changed*, non-healthy state:
+
+```
+Network change / periodic tick / app resume
+     │
+     ▼
+Quick check ── unchanged ──► nothing emitted
+     │
+  changed
+     │
+     ├── healthy ──────────────────────────────► emit status + events
+     │
+     └── degraded / localOnly / offline
+                │
+                ▼
+        Deep diagnosis (gateway, DNS, TCP, TLS, IPv4, IPv6, quality)
+                │
+                ├── confirms the change ────────► emit status + events + report
+                └── contradicts it ─────────────► nothing emitted
+```
+
+```dart
+final monitor = doctor.monitor(
+  config: NetworkMonitorConfig(
+    debounce: const Duration(seconds: 1),
+    periodicCheckInterval: const Duration(seconds: 30),
+    runDeepDiagnosisOnFailure: true,
+  ),
+);
+
+final subscription = monitor.events.listen((event) {
+  switch (event) {
+    case NetworkBecameOnline():
+      resumeUploads();
+    case NetworkBecameOffline():
+      showOfflineBanner();
+    case NetworkTransportChanged(:final previousTransports):
+      adjustQualityFor(previousTransports, event.status.transports);
+    case NetworkDegraded(:final report):
+      attachToSupportTicket(report?.toPrettyJson(redactNetworkAddresses: true));
+    case NetworkRecovered():
+      hideOfflineBanner();
+  }
+});
+
+await monitor.start();
+
+// Later
+await monitor.stop();
+await subscription.cancel();
+await monitor.dispose();
+```
+
+`monitor.status` carries the absolute state as a broadcast stream. It does not replay, so pair it with `monitor.currentStatus`:
+
+```dart
+StreamBuilder<NetworkStatus>(
+  initialData: monitor.currentStatus,
+  stream: monitor.status,
+  builder: (context, snapshot) => Text(snapshot.data?.health.name ?? 'unknown'),
+)
+```
+
+Things worth knowing:
+
+- **`events` describes transitions.** The first observed status establishes a baseline and emits no event. Use `status` or `currentStatus` for absolute state, or the value returned by `await monitor.start()`.
+- **Nothing is emitted while the network is unchanged.** A status is compared on health, internet reachability, captive-portal suspicion, and its set of transports.
+- **The streams never emit errors.** A cycle that fails or is cancelled is retried by the next trigger.
+- **Checks never overlap.** A trigger that arrives while a check is running is coalesced into a single follow-up rather than queued or dropped.
+- **Monitoring pauses in the background.** Timers stop and connectivity notifications are ignored until the application is resumed, at which point a check runs immediately. Background monitoring is not supported.
+- **`NetworkDoctorMonitor` must be disposed.** `dispose()` releases timers, subscriptions, and streams. A monitor created by `doctor.monitor()` borrows the doctor and never disposes it.
+
+Continuous monitoring costs battery and mobile data. `periodicCheckInterval` accepts `null` to rely purely on connectivity changes and manual `refresh()` calls.
+
 ## Health classification
 
 | Value | Meaning |
@@ -173,6 +270,9 @@ The public API is usable on Android, iOS, macOS, Windows, Linux, and Web. Capabi
 | Capability | Android | iOS | macOS | Windows | Linux | Web |
 |---|---:|---:|---:|---:|---:|---:|
 | Transport detection | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Transport change stream | ✅ | ✅ | ✅ | ✅ | ✅ | ✅** |
+| Quick check | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* |
+| Continuous monitoring | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* |
 | HTTP reachability | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* |
 | Wi-Fi/LAN metadata | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | DNS timing | ✅ | ✅ | ✅ | ✅ | ✅ | — |
@@ -186,6 +286,8 @@ The public API is usable on Android, iOS, macOS, Windows, Linux, and Web. Capabi
 | Android 17 permission readiness | ✅ | — | — | — | — | — |
 
 `*` Browser CORS and Content Security Policy rules apply to configured HTTP endpoints.
+
+`**` Browsers report only online and offline, so the web transport set is either `wifi` or `none`.
 
 Web returns `ProbeStatus.unsupported` for raw DNS, TCP, TLS, IP-route, and native platform checks. Linux and Windows use the complete Dart probe set but currently return `unsupported` for the additional native platform snapshot. Unsupported capabilities never cause a crash or degrade balanced health.
 
@@ -241,6 +343,9 @@ Every JSON report includes `schemaVersion` and `totalDurationMs` so support syst
 - Gateway reachability tries the configured TCP ports. A successful connection or an active refusal both prove that the gateway responded at the network layer.
 - Quality latency measures repeated TCP connection setup. `packetLossPercent` is the percentage of failed or timed-out TCP samples, not an ICMP packet-loss measurement.
 - Jitter is the mean absolute latency difference between consecutive successful TCP samples.
+- A quick check measures HTTP reachability only. It reports `offline` from the operating-system transport state without probing, so it proves the absence of a route, not the absence of internet.
+- Monitor events describe transitions between observed states, not raw operating-system notifications. Several notifications can collapse into one event, and a notification that changes nothing produces none.
+- A connectivity read reporting no transport is confirmed by a second read before it is trusted. Apple platforms restart their network path monitor after the last connectivity listener is cancelled and briefly report `none` on a device that is online.
 - Timings can be influenced by DNS caches, connection policy, VPNs, proxies, firewalls, and platform scheduling.
 
 ## Development
@@ -275,6 +380,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
 - Native Windows and Linux path characteristics
 - Reusable support/debug panel widget
+- Reusable connectivity banner widget backed by `NetworkDoctorMonitor`
 
 ## Maintainer
 
