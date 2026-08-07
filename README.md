@@ -1,7 +1,11 @@
 # flutter_network_doctor
 
-[![CI](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml/badge.svg?branch=main&event=push&v=0.3.3)](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml)
+[![CI](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml/badge.svg?branch=main&event=push&v=0.3.4)](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/banner.png" width="100%" alt="flutter_network_doctor — diagnose network issues, build better connections">
+</p>
 
 Production-grade network diagnostics for Flutter applications.
 

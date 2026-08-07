@@ -1,3 +1,7 @@
+## 0.3.4
+
+- Added a project banner to the top of the README.
+
 ## 0.3.3
 
 - Fixed the CI badge to track successful pushes to the main branch.
