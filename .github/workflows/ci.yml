@@ -198,8 +198,11 @@ jobs:
     name: Integration iOS
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: test
-    runs-on: macos-latest
-    timeout-minutes: 30
+    # Flutter 3.44 can finish the Xcode build but fail to attach to the iOS 26
+    # simulator currently selected by macos-latest. Keep this runtime explicit
+    # until that runner becomes compatible with the stable Flutter toolchain.
+    runs-on: macos-15
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: example
@@ -217,4 +220,5 @@ jobs:
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
           echo "IOS_DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
-      - run: flutter drive --driver=test_driver/integration_test.dart --target=integration_test/network_doctor_integration_test.dart -d "$IOS_DEVICE_ID"
+      - name: Run iOS integration test
+        run: flutter drive --driver=test_driver/integration_test.dart --target=integration_test/network_doctor_integration_test.dart -d "$IOS_DEVICE_ID" --timeout=300
