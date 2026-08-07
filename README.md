@@ -1,7 +1,11 @@
 # flutter_network_doctor
 
 [![CI](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml/badge.svg?branch=main&event=push&v=0.3.4)](https://github.com/malikdoksoz/flutter_network_doctor/actions/workflows/ci.yml)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![pub package](https://img.shields.io/pub/v/flutter_network_doctor.svg)](https://pub.dev/packages/flutter_network_doctor)
+[![pub points](https://img.shields.io/pub/points/flutter_network_doctor)](https://pub.dev/packages/flutter_network_doctor/score)
+[![likes](https://img.shields.io/pub/likes/flutter_network_doctor)](https://pub.dev/packages/flutter_network_doctor/score)
+[![publisher](https://img.shields.io/pub/publisher/flutter_network_doctor)](https://pub.dev/publishers/malikdoksoz.com)
+[![license: MIT](https://img.shields.io/github/license/malikdoksoz/flutter_network_doctor)](LICENSE)
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/malikdoksoz/flutter_network_doctor/main/screenshots/banner.png" width="100%" alt="flutter_network_doctor — diagnose network issues, build better connections">
