@@ -160,7 +160,14 @@ final class NetworkDoctorMonitor {
     final subscription = _connectivitySubscription;
     _connectivitySubscription = null;
     _cycleToken?.cancel();
-    await subscription?.cancel();
+    if (subscription != null) {
+      try {
+        await subscription.cancel();
+      } on Object {
+        // A platform implementation that fails to tear its own stream down
+        // must not stop this monitor from releasing everything else.
+      }
+    }
     await _awaitCycle();
   }
 
@@ -208,19 +215,35 @@ final class NetworkDoctorMonitor {
     if (_connectivitySubscription != null) {
       return;
     }
-    try {
-      _connectivitySubscription = _connectivity.onConnectivityChanged.listen(
-        (_) => _handleConnectivityEvent(),
-        onError: (Object _, StackTrace _) {
-          // A failing connectivity stream must not stop monitoring; periodic
-          // checks and manual refreshes keep working.
-        },
-        cancelOnError: false,
-      );
-    } on Object {
-      // Platforms without a connectivity stream fall back to periodic checks.
-      _connectivitySubscription = null;
-    }
+    // A platform implementation can also fail *while setting the stream up*,
+    // after `listen` has already returned. `connectivity_plus` on Linux
+    // reaches NetworkManager over D-Bus from its controller's `onListen`
+    // callback and discards the resulting future, so a machine without
+    // NetworkManager surfaces the failure as an uncaught error in whichever
+    // zone subscribed. Neither the `catch` below nor `onError` can observe
+    // that, so the subscription is created in a guarded zone that absorbs it.
+    runZonedGuarded(
+      () {
+        try {
+          _connectivitySubscription = _connectivity.onConnectivityChanged
+              .listen(
+                (_) => _handleConnectivityEvent(),
+                onError: (Object _, StackTrace _) {
+                  // A failing connectivity stream must not stop monitoring;
+                  // periodic checks and manual refreshes keep working.
+                },
+                cancelOnError: false,
+              );
+        } on Object {
+          // Platforms without a connectivity stream fall back to periodic
+          // checks.
+          _connectivitySubscription = null;
+        }
+      },
+      (Object _, StackTrace _) {
+        // Monitoring degrades to periodic checks and manual refreshes.
+      },
+    );
   }
 
   void _handleConnectivityEvent() {

@@ -37,6 +37,19 @@ final class FlutterNetworkDoctor {
   final PlatformNetworkProbe _platformProbe;
   final NativeNetworkProbe _nativeNetworkProbe = const NativeNetworkProbe();
 
+  /// Waits inserted before each read that confirms a no-transport answer.
+  ///
+  /// A restarted Apple path monitor was measured settling roughly 30ms after
+  /// the read that restarted it, so this schedule leaves an order of magnitude
+  /// of headroom for a loaded machine. The cost is paid only by a device that
+  /// keeps reporting no transport, which produces no network traffic either
+  /// way, and it keeps such a check well under a second.
+  static const List<Duration> _connectivitySettleDelays = <Duration>[
+    Duration(milliseconds: 25),
+    Duration(milliseconds: 75),
+    Duration(milliseconds: 200),
+  ];
+
   /// Runs all enabled checks and produces a single immutable report.
   ///
   /// The run throws [NetworkDoctorCancelledException] when [cancellationToken]
@@ -407,12 +420,14 @@ final class FlutterNetworkDoctor {
   /// Callers must not treat the `none` fallback of a failed read as proof that
   /// the device is offline.
   ///
-  /// A first read that reports no transport is confirmed by a second one.
+  /// A first read that reports no transport is confirmed by further reads.
   /// Apple platforms tear down their network path monitor when the last
   /// connectivity stream listener is cancelled; the next read restarts the
   /// monitor and observes its still-unsatisfied initial path, which reports
-  /// `none` on a device that is online. The restarted monitor has settled by
-  /// the time a second read completes, so no delay is needed.
+  /// `none` on a device that is online. A restarted monitor settles on its own
+  /// dispatch queue rather than in response to being read, so each confirming
+  /// read waits first; reading again immediately just races the same
+  /// unsatisfied path.
   Future<({List<ConnectivityResult> results, bool succeeded})>
   _readConnectivity(
     Duration timeout,
@@ -422,8 +437,18 @@ final class FlutterNetworkDoctor {
     if (!first.succeeded || _reportsAnyTransport(first.results)) {
       return first;
     }
-    final second = await _readConnectivityOnce(timeout, cancellation);
-    return second.succeeded ? second : first;
+
+    for (final delay in _connectivitySettleDelays) {
+      await cancellation.guard(Future<void>.delayed(delay));
+      final confirming = await _readConnectivityOnce(timeout, cancellation);
+      if (!confirming.succeeded) {
+        return first;
+      }
+      if (_reportsAnyTransport(confirming.results)) {
+        return confirming;
+      }
+    }
+    return first;
   }
 
   Future<({List<ConnectivityResult> results, bool succeeded})>

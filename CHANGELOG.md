@@ -6,7 +6,8 @@
 - Escalated to a full diagnostic run only when a quick check observes a changed, non-healthy state, so an unchanged network costs one cheap check and a quick-check false positive is never emitted.
 - Debounced operating-system connectivity notifications, re-armed periodic checks after each completed run, coalesced overlapping triggers into a single follow-up, and suppressed emissions that repeat the current state.
 - Paused all monitor work while the application is backgrounded and ran an immediate check on resume, degrading gracefully when no Flutter binding is available.
-- Confirmed a connectivity read that reports no transport with a second read, fixing a false `offline` verdict on Apple platforms whose network path monitor restarts after the last connectivity listener is cancelled.
+- Confirmed a connectivity read that reports no transport with further reads that wait for the platform to settle, fixing a false `offline` verdict on Apple platforms whose network path monitor restarts after the last connectivity listener is cancelled.
+- Kept a monitor running when a platform implementation fails to set its connectivity stream up, including the uncaught D-Bus failure `connectivity_plus` reports on Linux machines without NetworkManager, and when it fails to tear that stream down again.
 - Added `NetworkCheckConfig` and `NetworkMonitorConfig` with validation matching `NetworkDoctorConfig`.
 - Serialized `NetworkStatus` to versioned JSON with the same network-address redaction as reports.
 - Added deterministic quick-check, monitor state-machine, lifecycle, concurrency, and Web fallback tests, plus a monitor lifecycle case to the on-device integration suite.
