@@ -136,10 +136,11 @@ jobs:
     name: Integration iOS
     if: github.event_name == 'workflow_dispatch'
     needs: test
-    # Flutter 3.44 can finish the Xcode build but fail to attach to the iOS 26
-    # simulator currently selected by macos-latest. Keep this runtime explicit
-    # until that runner becomes compatible with the stable Flutter toolchain.
-    runs-on: macos-15
+    # `connectivity_plus` reads `NWPath.isUltraConstrained`, which only exists
+    # in the iOS 26 SDK, so an older image cannot compile the pod at all. The
+    # attach failure that this job was once pinned to macos-15 to avoid is
+    # handled below instead, by booting a simulator and driving it by id.
+    runs-on: macos-latest
     timeout-minutes: 15
     defaults:
       run:
