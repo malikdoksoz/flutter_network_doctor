@@ -25,6 +25,17 @@ final class FakeConnectivity extends ConnectivityPlatform {
   bool failCheck = false;
   int checkCount = 0;
 
+  /// Whether subscribing to [onConnectivityChanged] fails asynchronously.
+  ///
+  /// Reproduces `connectivity_plus` on Linux, which reaches NetworkManager
+  /// over D-Bus from an `async` `onListen` callback and discards the returned
+  /// future. A machine without NetworkManager therefore reports the failure as
+  /// an uncaught error in the subscribing zone rather than through the
+  /// stream's `onError`.
+  bool failStreamSetup = false;
+
+  StreamController<List<ConnectivityResult>>? _failingController;
+
   @override
   Future<List<ConnectivityResult>> checkConnectivity() async {
     checkCount += 1;
@@ -38,8 +49,24 @@ final class FakeConnectivity extends ConnectivityPlatform {
   }
 
   @override
-  Stream<List<ConnectivityResult>> get onConnectivityChanged =>
-      controller.stream;
+  Stream<List<ConnectivityResult>> get onConnectivityChanged {
+    if (!failStreamSetup) {
+      return controller.stream;
+    }
+    final failing = _failingController ??=
+        StreamController<List<ConnectivityResult>>.broadcast(
+          // The future is discarded here exactly as the Linux
+          // implementation discards it, which is what turns the failure
+          // into an uncaught zone error.
+          onListen: () => unawaited(_failToSetUpStream()),
+        );
+    return failing.stream;
+  }
+
+  static Future<void> _failToSetUpStream() async {
+    await Future<void>.delayed(Duration.zero);
+    throw StateError('The connectivity service is unavailable.');
+  }
 
   /// Reports a new transport set and notifies listeners.
   void emit(List<ConnectivityResult> results) {
@@ -47,7 +74,10 @@ final class FakeConnectivity extends ConnectivityPlatform {
     controller.add(results);
   }
 
-  Future<void> close() => controller.close();
+  Future<void> close() async {
+    await controller.close();
+    await _failingController?.close();
+  }
 }
 
 /// Installs [fake] as the connectivity platform and restores the previous

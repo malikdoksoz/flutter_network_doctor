@@ -465,4 +465,35 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(endpoints.requests, greaterThanOrEqualTo(2));
   });
+
+  test(
+    'a connectivity stream that fails to start never breaks a monitor',
+    () async {
+      installFakeConnectivity(addTearDown).failStreamSetup = true;
+      final endpoints = FakeEndpoints();
+      final monitor = NetworkDoctorMonitor(
+        config: monitorConfig(
+          periodicCheckInterval: const Duration(milliseconds: 40),
+        ),
+        httpClient: endpoints.client(),
+      );
+
+      // Without a guarded zone the discarded setup failure is reported as an
+      // uncaught error and fails this test rather than being absorbed.
+      final status = await monitor.start();
+
+      expect(status, isNotNull);
+      expect(status!.hasInternet, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(
+        endpoints.requests,
+        greaterThanOrEqualTo(2),
+        reason: 'periodic checks keep running without a connectivity stream',
+      );
+
+      // Tearing the stream down must stay quiet too.
+      await monitor.dispose();
+      expect(monitor.isRunning, isFalse);
+    },
+  );
 }

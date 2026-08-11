@@ -27,8 +27,11 @@ void main() {
     expect(requests, 0);
     expect(
       fake.checkCount,
-      2,
-      reason: 'a no-transport answer must be confirmed before it is trusted',
+      4,
+      reason:
+          'a no-transport answer must be confirmed before it is trusted, '
+          'and every confirming read must have had time to observe a settled '
+          'path monitor',
     );
     expect(status.health, NetworkHealth.offline);
     expect(status.hasInternet, isFalse);
@@ -87,6 +90,32 @@ void main() {
       expect(status.health, NetworkHealth.healthy);
     },
   );
+
+  test('a path monitor that settles slowly never counts as offline', () async {
+    // One confirming read is not always enough: the restarted monitor
+    // settles on its own schedule, so reads keep going until it does.
+    final fake = installFakeConnectivity(addTearDown)
+      ..scriptedReads.addAll(const <List<ConnectivityResult>>[
+        <ConnectivityResult>[ConnectivityResult.none],
+        <ConnectivityResult>[ConnectivityResult.none],
+        <ConnectivityResult>[ConnectivityResult.none],
+      ]);
+    var requests = 0;
+    final doctor = FlutterNetworkDoctor(
+      httpClient: MockClient((http.Request request) async {
+        requests += 1;
+        return http.Response('', 204);
+      }),
+    );
+    addTearDown(doctor.dispose);
+
+    final status = await doctor.check();
+
+    expect(fake.checkCount, 4);
+    expect(requests, 1, reason: 'the settled read reported a live transport');
+    expect(status.transports, <NetworkTransport>[NetworkTransport.wifi]);
+    expect(status.health, NetworkHealth.healthy);
+  });
 
   test('a failed connectivity read never counts as offline', () async {
     final fake = installFakeConnectivity(addTearDown)..failCheck = true;
