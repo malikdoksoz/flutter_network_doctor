@@ -136,10 +136,14 @@ jobs:
     name: Integration iOS
     if: github.event_name == 'workflow_dispatch'
     needs: test
-    # Flutter 3.44 can finish the Xcode build but fail to attach to the iOS 26
-    # simulator currently selected by macos-latest. Keep this runtime explicit
-    # until that runner becomes compatible with the stable Flutter toolchain.
-    runs-on: macos-15
+    # `connectivity_plus` reads `NWPath.isUltraConstrained`, which exists only
+    # in the iOS 26 SDK, so an older image cannot compile the pod at all. On
+    # this image Flutter 3.44 then finished the Xcode build and hung installing
+    # on the simulator picked by default, silent until the job timed out.
+    # Pinning the selection to the lowest runtime present cleared that. The
+    # image carries no runtime older than iOS 26, so this is a choice between
+    # 26.x releases rather than a way to avoid iOS 26.
+    runs-on: macos-latest
     timeout-minutes: 15
     defaults:
       run:
@@ -153,8 +157,32 @@ jobs:
       - run: flutter pub get
       - name: Boot an iPhone simulator
         run: |
-          DEVICE_ID=$(xcrun simctl list devices available -j | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
-          test -n "$DEVICE_ID"
+          # The image carried iOS 26.2, 26.4 and 26.5 when this was written, and
+          # only 26.2 worked. Record the list so a change in what ships here is
+          # visible in the log instead of arriving as another silent timeout.
+          xcrun simctl list runtimes available
+
+          DEVICE=$(xcrun simctl list devices available -j | jq -c '
+            [ .devices
+              | to_entries[]
+              | select(.key | test("SimRuntime\\.iOS-"))
+              | (.key | capture("iOS-(?<major>[0-9]+)-(?<minor>[0-9]+)")) as $v
+              | .value[]
+              | select(.name | startswith("iPhone"))
+              | {
+                  udid,
+                  name,
+                  runtime: "\($v.major).\($v.minor)",
+                  order: (($v.major | tonumber) * 1000 + ($v.minor | tonumber))
+                }
+            ]
+            | sort_by(.order)
+            | first // empty')
+          test -n "$DEVICE"
+
+          DEVICE_ID=$(jq -r '.udid' <<<"$DEVICE")
+          echo "Selected $(jq -r '.name' <<<"$DEVICE") on iOS $(jq -r '.runtime' <<<"$DEVICE")"
+
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
           echo "IOS_DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
