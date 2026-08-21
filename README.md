@@ -38,6 +38,7 @@ The screenshots come from a real iOS Simulator diagnostic run. Network addresses
 - Sub-second quick checks that produce no network traffic on a disconnected device
 - Continuous monitoring with online, offline, transport-change, degraded, and recovered events
 - Two-tier monitoring: cheap checks on every change, full diagnostics only when something breaks
+- Ready-made Material connectivity banner and support panel widgets
 - Wi-Fi/LAN metadata: SSID, BSSID, local IPv4/IPv6, subnet, broadcast, and gateway
 - DNS lookup, TCP connection, and TLS handshake timing on `dart:io` platforms
 - Separate IPv4 and IPv6 route checks
@@ -249,6 +250,69 @@ Things worth knowing:
 
 Continuous monitoring costs battery and mobile data. `periodicCheckInterval` accepts `null` to rely purely on connectivity changes and manual `refresh()` calls.
 
+## Ready-made widgets
+
+Two Material widgets cover the cases most applications build by hand. Both are optional: importing the package does not force them into an application that only wants the diagnostic API.
+
+### Connectivity banner
+
+`NetworkDoctorBanner` renders live monitor state. It occupies no space while it is hidden, so it composes directly above application content:
+
+```dart
+Column(
+  children: <Widget>[
+    const NetworkDoctorBanner(),
+    Expanded(child: content),
+  ],
+)
+```
+
+Without a monitor the banner creates one, starts it, and disposes it with the widget. Pass an existing monitor to share one across the application; a supplied monitor is never started or disposed by the banner, so start it yourself.
+
+```dart
+NetworkDoctorBanner(
+  monitor: monitor,
+  visibility: NetworkBannerVisibility.whenNotHealthy,
+  labels: const NetworkDoctorBannerLabels(
+    offline: 'İnternet bağlantısı yok',
+    retry: 'Yeniden dene',
+  ),
+  recoveryDisplayDuration: const Duration(seconds: 3),
+  onTap: () => NetworkDoctorPanel.showAsBottomSheet(context),
+)
+```
+
+| Option | Effect |
+|---|---|
+| `visibility` | `whenOffline`, `whenNotHealthy` (default), or `always`. |
+| `labels` | Every string the banner renders, for localisation. |
+| `showRetryAction` | Whether the retry action, which refreshes the monitor, is shown. |
+| `recoveryDisplayDuration` | How long the healthy "back online" notice stays visible. `Duration.zero` hides it immediately. |
+| `builder` | Replaces the content entirely while keeping the monitor wiring and the show/hide animation. |
+
+Colours come from the ambient `ColorScheme`: error colours for unreachable states, tertiary colours for a degraded connection, and primary colours for the recovery notice.
+
+### Support panel
+
+`NetworkDoctorPanel` runs a diagnosis, renders the report as readable sections, and produces the JSON a support ticket needs:
+
+```dart
+NetworkDoctorPanel(
+  config: NetworkDoctorConfig(includeGatewayProbe: true),
+  onShare: (String json) => shareWithSupport(json),
+)
+```
+
+Or as a modal sheet from anywhere:
+
+```dart
+await NetworkDoctorPanel.showAsBottomSheet(context, doctor: doctor);
+```
+
+The panel runs a diagnosis as soon as it is inserted (`runOnStart: false` waits for the run action), shows progress, allows cancelling a run, copies the report JSON to the clipboard, and hands the same JSON to `onShare` when that callback is supplied. Pass `initialReport: monitor.latestReport` to show the deep diagnosis a monitor already produced.
+
+`redactWifiIdentifiers` and `redactNetworkAddresses` default to `true` and apply to the copied and shared JSON. Values are rendered unredacted on screen, because the panel runs on the device whose network it describes; keep that in mind before asking users for screenshots.
+
 ## Health classification
 
 | Value | Meaning |
@@ -374,13 +438,22 @@ Integration and performance regression tests use deterministic local clients
 and sockets. They verify registered platform plugins, concurrent HTTP probe
 scheduling, and bounded deadlines without relying on external services.
 
+### Testing an application that uses a monitor
+
+`testWidgets` runs a test body inside a fake async zone whose clock stops before
+tear-down runs. A stream whose listener was created inside that zone can no
+longer deliver anything afterwards, so dispose a monitor **inside** the test body
+rather than from `addTearDown`, or drive its lifecycle through
+`tester.runAsync(monitor.dispose)` while the body is still executing. A monitor
+configured without `periodicCheckInterval` arms no timer, so leaving it
+undisposed in a test leaves nothing pending either.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
 ## Roadmap
 
 - Native Windows and Linux path characteristics
-- Reusable support/debug panel widget
-- Reusable connectivity banner widget backed by `NetworkDoctorMonitor`
+- Cupertino variants of the bundled widgets
 
 ## Maintainer
 

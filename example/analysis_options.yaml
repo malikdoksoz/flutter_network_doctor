@@ -9,6 +9,20 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+# Platform host projects and build output are not part of the Dart sources of
+# this package. `flutter analyze` writes this section itself when it is missing,
+# which leaves a dirty tree behind and fails `dart pub publish --dry-run` in CI,
+# so it is checked in.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - linux/**
+    - macos/**
+    - web/**
+    - windows/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

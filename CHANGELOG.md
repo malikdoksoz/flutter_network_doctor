@@ -1,3 +1,13 @@
+## 0.5.0
+
+- Added `NetworkDoctorBanner`, a Material connectivity banner backed by `NetworkDoctorMonitor` that stays hidden while the network is healthy, animates in and out, offers a retry action, and shows a transient recovery notice.
+- Added visibility policies, localisable labels, and a full content builder to the banner, and let it create, start, and dispose a monitor of its own when none is supplied.
+- Added `NetworkDoctorPanel`, a Material support panel that runs a diagnosis, renders every report section, reports progress, cancels a running diagnosis, copies the redacted report JSON to the clipboard, and hands the same JSON to an optional share callback.
+- Added `NetworkDoctorPanel.showAsBottomSheet` for opening the panel as a modal sheet from anywhere.
+- Fixed a diagnostic run that was given a cancellation token hanging inside the fake async zone of a `testWidgets` test, which made widget tests of monitor-driven interfaces impossible.
+- Stopped awaiting the cancellation of the connectivity subscription while a monitor stops; the stopped state already suppresses further events, and awaiting a broadcast cancellation hangs the same fake async zone.
+- Added deterministic banner and panel widget tests, and wired both widgets into the example application.
+
 ## 0.4.0
 
 - Added `FlutterNetworkDoctor.check()`, a sub-second quick check that returns a `NetworkStatus` and produces no network traffic when the operating system reports no active transport.
