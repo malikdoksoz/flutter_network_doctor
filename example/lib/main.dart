@@ -129,49 +129,80 @@ class _NetworkDoctorPageState extends State<_NetworkDoctorPage> {
       '${value.minute.toString().padLeft(2, '0')}:'
       '${value.second.toString().padLeft(2, '0')}';
 
+  Future<void> _openSupportPanel() => NetworkDoctorPanel.showAsBottomSheet(
+    context,
+    doctor: _doctor,
+    config: NetworkDoctorConfig(
+      includeGatewayProbe: true,
+      includeNetworkQualityProbe: true,
+    ),
+    initialReport: _report ?? _monitor.latestReport,
+  );
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Network Doctor')),
-    body: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          FilledButton.icon(
-            onPressed: _running ? null : _run,
-            icon: const Icon(Icons.network_check),
-            label: Text(_running ? 'Running…' : 'Run diagnostics'),
-          ),
-          if (_running) ...<Widget>[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _cancellationToken?.cancel,
-              icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Cancel'),
-            ),
-          ],
+    body: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        // Attached to the page's monitor, so it reflects live state as soon
+        // as "Start monitor" is used. Applications that want a banner without
+        // owning a monitor can use `const NetworkDoctorBanner()` instead,
+        // which creates, starts, and disposes one of its own.
+        NetworkDoctorBanner(
+          monitor: _monitor,
+          onTap: () => unawaited(_openSupportPanel()),
+        ),
+        Expanded(child: _buildBody(context)),
+      ],
+    ),
+  );
+
+  Widget _buildBody(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        FilledButton.icon(
+          onPressed: _running ? null : _run,
+          icon: const Icon(Icons.network_check),
+          label: Text(_running ? 'Running…' : 'Run diagnostics'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => unawaited(_openSupportPanel()),
+          icon: const Icon(Icons.support_agent),
+          label: const Text('Open support panel'),
+        ),
+        if (_running) ...<Widget>[
           const SizedBox(height: 8),
-          Text(_status),
-          const SizedBox(height: 16),
-          _MonitorPanel(
-            monitor: _monitor,
-            events: _events,
-            onToggle: _toggleMonitor,
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: SingleChildScrollView(
-              child: SelectableText(
-                _report?.toPrettyJson(
-                      redactWifiIdentifiers: true,
-                      redactNetworkAddresses: true,
-                    ) ??
-                    'No report yet.',
-              ),
-            ),
+          OutlinedButton.icon(
+            onPressed: _cancellationToken?.cancel,
+            icon: const Icon(Icons.cancel_outlined),
+            label: const Text('Cancel'),
           ),
         ],
-      ),
+        const SizedBox(height: 8),
+        Text(_status),
+        const SizedBox(height: 16),
+        _MonitorPanel(
+          monitor: _monitor,
+          events: _events,
+          onToggle: _toggleMonitor,
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: SingleChildScrollView(
+            child: SelectableText(
+              _report?.toPrettyJson(
+                    redactWifiIdentifiers: true,
+                    redactNetworkAddresses: true,
+                  ) ??
+                  'No report yet.',
+            ),
+          ),
+        ),
+      ],
     ),
   );
 }

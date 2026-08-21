@@ -87,6 +87,12 @@ final class NetworkDoctorRunCancellation {
   Future<void> finish() async {
     _finished = true;
     _timer?.cancel();
-    await _externalSubscription?.cancel();
+    // Cancelling takes effect immediately; the returned future is deliberately
+    // not awaited. `Future.asStream` completes its cancel future in the root
+    // zone, which never runs while a `testWidgets` fake async zone controls the
+    // clock, so awaiting it would hang every widget test that runs a
+    // diagnosis with a cancellation token.
+    unawaited(_externalSubscription?.cancel());
+    _externalSubscription = null;
   }
 }

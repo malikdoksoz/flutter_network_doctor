@@ -91,9 +91,12 @@ FakeConnectivity installFakeConnectivity(
   final previous = ConnectivityPlatform.instance;
   final fake = FakeConnectivity(initial);
   ConnectivityPlatform.instance = fake;
-  addTearDown(() async {
+  addTearDown(() {
     ConnectivityPlatform.instance = previous;
-    await fake.close();
+    // Deliberately not awaited. Under `testWidgets` this controller belongs to
+    // the test's fake async zone, which stops running before tear-down does, so
+    // awaiting its close future would hang the test forever.
+    unawaited(fake.close());
   });
   return fake;
 }

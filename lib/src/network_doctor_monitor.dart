@@ -162,7 +162,11 @@ final class NetworkDoctorMonitor {
     _cycleToken?.cancel();
     if (subscription != null) {
       try {
-        await subscription.cancel();
+        // Not awaited. Events that still arrive are already suppressed by the
+        // `_running` flag cleared above, while awaiting the cancellation of a
+        // broadcast subscription hangs inside a `testWidgets` fake async zone,
+        // where the root zone that completes it never runs.
+        unawaited(subscription.cancel());
       } on Object {
         // A platform implementation that fails to tear its own stream down
         // must not stop this monitor from releasing everything else.

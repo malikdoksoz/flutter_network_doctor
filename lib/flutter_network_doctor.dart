@@ -9,6 +9,8 @@ export 'src/monitor_config.dart';
 export 'src/monitor_events.dart';
 export 'src/network_doctor_monitor.dart';
 export 'src/network_status.dart';
+export 'src/widgets/network_doctor_banner.dart';
+export 'src/widgets/network_doctor_panel.dart';
 
 /// No-op registration entry point for Dart-only desktop implementations.
 ///
